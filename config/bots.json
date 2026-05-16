@@ -1,0 +1,64 @@
+{
+  "bots": [
+    {
+      "name": "aibot",
+      "api_id": 12345,
+      "api_hash": "your_api_hash_here",
+      "session_file": "sessions/aibot.session",
+      "routing_rules": [
+        {
+          "condition": {
+            "event_type": "command",
+            "command_starts_with": "/admin"
+          },
+          "target": "incoming.events.aibot.commands.admin"
+        },
+        {
+          "condition": {
+            "event_type": "message",
+            "has_media": true,
+            "media_type": "photo"
+          },
+          "target": "incoming.events.aibot.messages.image"
+        },
+        {
+          "condition": {
+            "event_type": "message",
+            "has_media": false
+          },
+          "target": "incoming.events.aibot.messages.text"
+        },
+        {
+          "condition": {
+            "event_type": "callback_query"
+          },
+          "target": "incoming.events.aibot.callbacks"
+        },
+        {
+          "condition": {},
+          "target": "incoming.events.aibot.unhandled"
+        }
+      ]
+    },
+    {
+      "name": "supportbot",
+      "api_id": 67890,
+      "api_hash": "another_api_hash",
+      "session_file": "sessions/supportbot.session",
+      "routing_rules": [
+        {
+          "condition": {
+            "event_type": "command"
+          },
+          "target": "incoming.events.supportbot.commands"
+        },
+        {
+          "condition": {
+            "event_type": "message"
+          },
+          "target": "incoming.events.supportbot.messages"
+        }
+      ]
+    }
+  ]
+}
