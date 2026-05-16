@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 import structlog
 
+from infrastructure.broker import RabbitMQManager
 from infrastructure.config import ConfigLoader
 from infrastructure.health import create_health_server
 
@@ -20,9 +21,13 @@ async def main() -> None:
         cache_logger_on_first_use=True,
     )
     logger = structlog.get_logger()
+
+    broker = RabbitMQManager(config.broker)
+    await broker.connect()
+
+    await create_health_server(config.health_port, broker=broker)
     logger.info("starting", version="0.1.0", bots=[b.name for b in config.bots])
-    await create_health_server(config.health_port)
-    logger.info("health server started", port=config.health_port)
+
     await asyncio.Event().wait()
 
 

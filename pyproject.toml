@@ -15,6 +15,11 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.mypy]
+mypy_path = "src"
+strict = true
+explicit_package_bases = true
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
