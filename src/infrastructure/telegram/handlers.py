@@ -1,0 +1,110 @@
+from pathlib import Path
+
+from pyrogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
+
+from domain.entities import (
+    CallbackQueryEvent,
+    ChatType,
+    CommandEvent,
+    MessageEvent,
+    RoutingContext,
+)
+
+
+def _detect_command(text: str | None) -> tuple[str | None, list[str]]:
+    if not text or not text.startswith("/"):
+        return None, []
+    parts = text.split()
+    raw = parts[0].lstrip("/").split("@")[0]
+    return raw, parts[1:]
+
+
+def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEvent:
+    command, args = _detect_command(message.text)
+
+    if command is not None:
+        return CommandEvent(
+            event_id=str(message.id),
+            bot_id=bot_id,
+            chat_id=message.chat.id,
+            user_id=message.from_user.id if message.from_user else 0,
+            message_id=message.id,
+            command=command,
+            command_args=args,
+            text=message.text or "",
+            raw_payload={},
+        )
+
+    has_media = message.media is not None
+    media_type = str(message.media.value) if message.media else None
+
+    return MessageEvent(
+        event_id=str(message.id),
+        bot_id=bot_id,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id if message.from_user else 0,
+        message_id=message.id,
+        text=message.text,
+        caption=message.caption,
+        has_media=has_media,
+        media_type=media_type,
+        raw_payload={},
+    )
+
+
+def callback_to_event(bot_id: str, query: CallbackQuery) -> CallbackQueryEvent:
+    return CallbackQueryEvent(
+        event_id=str(query.id),
+        bot_id=bot_id,
+        chat_id=query.message.chat.id if query.message else 0,
+        user_id=query.from_user.id,
+        callback_id=str(query.id),
+        callback_data=query.data.decode()
+        if isinstance(query.data, bytes)
+        else query.data or "",
+        message_id=query.message.id if query.message else None,
+        raw_payload={},
+    )
+
+
+def extract_routing_context(message: Message) -> RoutingContext:
+    chat_type_str = (
+        message.chat.type.value if message.chat and message.chat.type else "private"
+    )
+    command, _ = _detect_command(message.text)
+
+    return RoutingContext(
+        chat_type=ChatType(chat_type_str),
+        has_media=message.media is not None,
+        media_type=str(message.media.value) if message.media else None,
+        command=command,
+    )
+
+
+def build_reply_markup(
+    buttons: list[list[dict[str, str]]] | None,
+) -> InlineKeyboardMarkup | None:
+    if not buttons:
+        return None
+    rows: list[list[InlineKeyboardButton]] = []
+    for row in buttons:
+        keyboard_row = [
+            InlineKeyboardButton(
+                text=btn["text"], callback_data=btn.get("callback_data") or ""
+            )
+            if "callback_data" in btn
+            else InlineKeyboardButton(text=btn["text"], url=btn.get("url") or "")
+            for btn in row
+        ]
+        rows.append(keyboard_row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)  # type: ignore[arg-type]
+
+
+def parse_session_path(session_file: str) -> tuple[str, str]:
+    p = Path(session_file)
+    return p.stem, str(p.parent)
