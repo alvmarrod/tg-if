@@ -1,9 +1,10 @@
 import json
 import os
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, Field
+
+from domain.rules import RoutingRule
 
 
 class BrokerConfig(BaseModel):
@@ -12,11 +13,6 @@ class BrokerConfig(BaseModel):
     user: str = Field(default="guest")
     password: str = Field(default="guest")
     vhost: str = Field(default="/")
-
-
-class RoutingRule(BaseModel):
-    condition: dict[str, Any] = Field(default_factory=dict)
-    target: str
 
 
 class BotConfig(BaseModel):

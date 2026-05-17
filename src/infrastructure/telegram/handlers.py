@@ -72,6 +72,15 @@ def callback_to_event(bot_id: str, query: CallbackQuery) -> CallbackQueryEvent:
     )
 
 
+def context_from_callback(query: CallbackQuery) -> RoutingContext:
+    chat_type_str = (
+        query.message.chat.type.value
+        if query.message and query.message.chat and query.message.chat.type
+        else "private"
+    )
+    return RoutingContext(chat_type=ChatType(chat_type_str))
+
+
 def extract_routing_context(message: Message) -> RoutingContext:
     chat_type_str = (
         message.chat.type.value if message.chat and message.chat.type else "private"

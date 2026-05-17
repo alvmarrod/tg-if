@@ -6,11 +6,13 @@ import structlog
 from pyrogram.enums import ParseMode
 from pyrogram.types import InputMediaPhoto, InputMediaVideo, Message
 
-from domain.entities import TelegramEvent
+from domain.entities import RoutingContext, TelegramEvent
 from infrastructure.config import BotConfig
 from infrastructure.telegram.handlers import (
     build_reply_markup,
     callback_to_event,
+    context_from_callback,
+    extract_routing_context,
     message_to_event,
     parse_session_path,
 )
@@ -18,7 +20,7 @@ from infrastructure.telegram.handlers import (
 
 logger = structlog.get_logger()
 
-EventCallback = Callable[[TelegramEvent], Awaitable[None]]
+EventCallback = Callable[[TelegramEvent, RoutingContext], Awaitable[None]]
 
 
 def _parse_mode(value: str | None) -> ParseMode | None:
@@ -194,8 +196,10 @@ class TelegramClient:
 
     async def _on_message(self, client: pyrogram.Client, message: Message) -> None:
         event = message_to_event(self._bot_id, message)
-        await self._event_callback(event)
+        context = extract_routing_context(message)
+        await self._event_callback(event, context)
 
     async def _on_callback_query(self, client: pyrogram.Client, query: Any) -> None:
         event = callback_to_event(self._bot_id, query)
-        await self._event_callback(event)
+        context = context_from_callback(query)
+        await self._event_callback(event, context)
