@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
@@ -10,6 +10,8 @@ from infrastructure.broker.rabbitmq import RabbitMQManager
 
 
 logger = structlog.get_logger()
+
+OnFailedCallback = Callable[[dict[str, Any], Exception], Awaitable[Any]]
 
 
 class ConsumerError(Exception):
@@ -21,11 +23,15 @@ class Consumer:
         self,
         manager: RabbitMQManager,
         queue_name: str,
-        callback: Callable[[dict[str, Any]], Any],
+        callback: Callable[[dict[str, Any]], Awaitable[Any]],
+        max_retries: int = 3,
+        on_failed: OnFailedCallback | None = None,
     ) -> None:
         self._manager = manager
         self._queue_name = queue_name
         self._callback = callback
+        self._max_retries = max_retries
+        self._on_failed = on_failed
         self._channel: AbstractChannel | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -50,11 +56,41 @@ class Consumer:
                 async with message.process():
                     try:
                         body: dict[str, Any] = json.loads(message.body.decode())
-                        await self._callback(body)
-                    except Exception:
-                        logger.exception(
-                            "consumer callback failed", queue=self._queue_name
-                        )
+                    except json.JSONDecodeError:
+                        logger.exception("invalid message body", queue=self._queue_name)
+                        continue
+
+                    await self._call_with_retry(body)
+
+    async def _call_with_retry(self, body: dict[str, Any]) -> None:
+        last_exc: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                await self._callback(body)
+                return
+            except Exception as exc:
+                last_exc = exc
+                if attempt < self._max_retries:
+                    delay = min(attempt + 1, 5)
+                    logger.warning(
+                        "consumer callback failed, retrying",
+                        queue=self._queue_name,
+                        attempt=attempt + 1,
+                        max_retries=self._max_retries,
+                        delay=delay,
+                    )
+                    await asyncio.sleep(delay)
+
+        logger.error(
+            "consumer callback failed after all retries",
+            queue=self._queue_name,
+            max_retries=self._max_retries,
+        )
+        if self._on_failed:
+            try:
+                await self._on_failed(body, last_exc)  # type: ignore[arg-type]
+            except Exception:
+                logger.exception("on_failed callback failed", queue=self._queue_name)
 
     async def stop(self) -> None:
         if self._task is not None:

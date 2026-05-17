@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import sys
 from pathlib import Path
 
@@ -6,9 +7,8 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 import structlog
 
-from infrastructure.broker import RabbitMQManager
+from app.receiver_service import ReceiverService
 from infrastructure.config import ConfigLoader
-from infrastructure.health import create_health_server
 
 
 async def main() -> None:
@@ -22,13 +22,17 @@ async def main() -> None:
     )
     logger = structlog.get_logger()
 
-    broker = RabbitMQManager(config.broker)
-    await broker.connect()
-
-    await create_health_server(config.health_port, broker=broker)
+    service = ReceiverService(config)
+    await service.start()
     logger.info("starting", version="0.1.0", bots=[b.name for b in config.bots])
 
-    await asyncio.Event().wait()
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop_event.set)
+
+    await stop_event.wait()
+    await service.stop()
 
 
 if __name__ == "__main__":

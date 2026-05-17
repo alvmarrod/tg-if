@@ -87,28 +87,18 @@ class CallbackQueryEvent(TelegramEvent):
     message_id: Optional[int] = None
 
 
-class OutgoingMessage(BaseModel):
-    """Abstract message to send to Telegram."""
+class OutgoingResponse(BaseModel):
+    """Response sent by a subscriber to be delivered to Telegram."""
 
-    message_id: str = Field(..., description="Unique message identifier")
+    response_id: str = Field(..., description="Unique response identifier")
+    correlation_id: str = Field(..., description="Correlates to original event")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
     bot_id: str = Field(..., description="Bot to send from")
     chat_id: int
-    text: str
-    reply_to_message_id: Optional[int] = None
-    buttons: Optional[list[list[dict[str, str]]]] = Field(
-        None, description="Button layout: list of rows, each row is list of buttons"
+    response_type: str = Field(
+        ...,
+        description="send method suffix: text, photo, document, video, audio, media_group",
     )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "message_id": "msg_123",
-                "bot_id": "aibot",
-                "chat_id": 12345,
-                "text": "Hello! Choose an option:",
-                "buttons": [
-                    [{"text": "Option 1", "callback_data": "opt1"}],
-                    [{"text": "Option 2", "callback_data": "opt2"}],
-                ],
-            }
-        }
+    payload: dict[str, Any] = Field(
+        default_factory=dict, description="kwargs forwarded to the send method"
+    )
