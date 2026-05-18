@@ -45,7 +45,7 @@ def _match_condition(
         elif key == "event_subtype":
             actual = resolve_subtype(event)
         elif key == "chat_type":
-            actual = context.chat_type.value
+            actual = context.chat_type
         elif key == "command":
             actual = context.command
         elif key == "command_starts_with":

@@ -2,8 +2,8 @@
 
 from enum import Enum
 from typing import Optional, Any
-from datetime import datetime
-from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EventType(str, Enum):
@@ -34,15 +34,14 @@ class RoutingContext(BaseModel):
     user_role: Optional[str] = None  # creator, administrator, member
     command: Optional[str] = None  # e.g., "/start", "/help"
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class TelegramEvent(BaseModel):
     """Base Telegram event (abstract)."""
 
     event_id: str = Field(..., description="Unique event identifier")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     bot_id: str = Field(..., description="Bot identifier")
     event_type: EventType
     chat_id: int
@@ -51,8 +50,7 @@ class TelegramEvent(BaseModel):
         default_factory=dict, description="Raw Telegram update"
     )
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class MessageEvent(TelegramEvent):
@@ -92,7 +90,7 @@ class OutgoingResponse(BaseModel):
 
     response_id: str = Field(..., description="Unique response identifier")
     correlation_id: str = Field(..., description="Correlates to original event")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     bot_id: str = Field(..., description="Bot to send from")
     chat_id: int
     response_type: str = Field(
