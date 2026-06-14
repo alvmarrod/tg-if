@@ -4,7 +4,7 @@
 
 ### B-001: Reconnect Callbacks
 
-**Status:** pending  
+**Status:** completed  
 **Effort:** Small  
 **Area:** infrastructure/telegram, app/receiver_service  
 **Subsystem:** [app](doc/subsystems/app.md) | [infra](doc/subsystems/infra.md)  

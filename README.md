@@ -401,7 +401,7 @@ The admin bot automatically sends alerts for control-plane events:
 | `✅ {component} connected` | Broker or bot transitions from disconnected → connected |
 | `❌ {component} disconnected` | Broker or bot transitions from connected → disconnected |
 
-Health is checked every 60 seconds. Notifications are sent on state transitions only (no repeated alerts for stable states).
+Telegram client connection changes are detected instantly via Pyrofork callbacks. Broker and admin bot status are checked every 60 seconds. Notifications are sent on state transitions only (no repeated alerts for stable states).
 
 ### Interactive Commands
 
