@@ -1,0 +1,13 @@
+{
+  "default": true,
+  "MD013": false,
+  "MD026": false,
+  "MD024": false,
+  "MD033": false,
+  "MD060": false,
+  "ul-style": {
+    "style": "consistent"
+  },
+  "blanks-around-fences": true,
+  "blanks-around-lists": true
+}

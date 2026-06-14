@@ -1,0 +1,31 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: docker run --rm -v .:/work -w /work ghcr.io/astral-sh/ruff:latest check
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      - id: ruff-format
+        name: ruff format
+        entry: docker run --rm -v .:/work -w /work ghcr.io/astral-sh/ruff:latest format --check
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      - id: markdownlint
+        name: markdownlint
+        entry: docker run --rm -v .:/work -w /work ghcr.io/igorshubovych/markdownlint-cli:latest markdownlint
+        language: system
+        types: [markdown]
+        files: ^(README|CHANGELOG)\.md$
+        args: ["--fix"]
+
+      - id: mypy
+        name: mypy
+        entry: bash -c 'uv run mypy src/ tests/'
+        language: system
+        types: [python]
+        pass_filenames: false

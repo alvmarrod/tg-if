@@ -4,7 +4,7 @@ install:
 	uv sync
 
 install-dev:
-	uv sync --dev
+	uv sync --all-extras
 
 lint:
 	uv run ruff check src/ tests/
@@ -20,6 +20,12 @@ test:
 	uv run pytest
 
 check: lint typecheck test
+
+precommit-install: install-dev
+	pre-commit install
+
+precommit:
+	pre-commit run --all-files
 
 build:
 	docker build -t tg-if .

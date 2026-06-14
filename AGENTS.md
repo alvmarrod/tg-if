@@ -89,12 +89,15 @@ Per `Hybrid approach.md`:
 ## Commands
 
 - Install: `uv sync`
-- Install dev: `uv sync --dev`
+- Install dev: `uv sync --all-extras`
 - Test: `uv run pytest`
 - Type check: `uv run mypy src/`
 - Lint: `uv run ruff check src/`
 - Format: `uv run ruff format src/`
 - Run: `python main.py`
+- Pre-commit install: `pre-commit install`
+- Pre-commit run all: `pre-commit run --all-files`
+- Pre-commit on staged: runs automatically on `git commit`
 
 ## Repository
 
