@@ -80,7 +80,7 @@ Exchange: tg-if.responses (direct, durable)
 
 ## Implementation Roadmap
 
-Per `Hybrid approach.md`:
+Per `doc/Hybrid approach.md`:
 
 1. **Phase 1 — Foundation**: Domain data structures, config loading, basic logging (done)
 2. **Phase 2 — Vertical Slice**: Single bot receive -> publish to broker -> consume response -> send to Telegram (done)
