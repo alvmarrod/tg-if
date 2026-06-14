@@ -20,7 +20,7 @@ repos:
         entry: docker run --rm -v .:/work -w /work ghcr.io/igorshubovych/markdownlint-cli:latest markdownlint --fix
         language: system
         types: [markdown]
-        files: ^(README|CHANGELOG|AGENTS|Hybrid approach)\.md$
+        exclude: ^\.venv/
 
       - id: mypy
         name: mypy

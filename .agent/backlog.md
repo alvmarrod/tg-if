@@ -3,6 +3,7 @@
 ## Work Items
 
 ### B-001: Reconnect Callbacks
+
 **Status:** pending  
 **Effort:** Small  
 **Area:** infrastructure/telegram, app/receiver_service  
@@ -14,6 +15,7 @@ Replace 60s health polling with instant Pyrofork connect/disconnect callbacks to
 ---
 
 ### B-002: Fill CHANGELOG.md
+
 **Status:** pending  
 **Effort:** Tiny  
 **Area:** docs  
@@ -23,6 +25,7 @@ Replace 60s health polling with instant Pyrofork connect/disconnect callbacks to
 ---
 
 ### B-003: Populate or Delete src/domain/schemas.py
+
 **Status:** pending  
 **Effort:** Tiny  
 **Area:** domain  
@@ -32,6 +35,7 @@ Replace 60s health polling with instant Pyrofork connect/disconnect callbacks to
 ---
 
 ### B-004: Integration Tests
+
 **Status:** pending  
 **Effort:** Medium  
 **Area:** tests  
@@ -41,6 +45,7 @@ Replace 60s health polling with instant Pyrofork connect/disconnect callbacks to
 ---
 
 ### B-005: More Admin Commands
+
 **Status:** pending  
 **Effort:** Small  
 **Area:** app/admin_commands  
@@ -50,6 +55,7 @@ Replace 60s health polling with instant Pyrofork connect/disconnect callbacks to
 ---
 
 ### B-006: Docker Compose for Local Dev
+
 **Status:** pending  
 **Effort:** Small  
 **Area:** devops  
@@ -59,6 +65,7 @@ Replace 60s health polling with instant Pyrofork connect/disconnect callbacks to
 ---
 
 ### B-007: More Routing Rule Conditions
+
 **Status:** pending  
 **Effort:** Small  
 **Area:** domain/rules  
@@ -68,5 +75,6 @@ Replace 60s health polling with instant Pyrofork connect/disconnect callbacks to
 ---
 
 ## Legend
+
 - **Status:** pending | in_progress | completed | cancelled
 - **Effort:** Tiny | Small | Medium | Large

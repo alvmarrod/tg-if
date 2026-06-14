@@ -19,10 +19,12 @@ RabbitMQ (tg-if.responses) → Consumer → ResponseConsumer → TelegramClient 
 ## Layers
 
 ### Domain Layer (`src/domain/`)
+
 - Entities: TelegramEvent, RoutingContext, OutgoingResponse, enums (EventType, ChatType)
 - Rules: RoutingRule, RulesEngine with condition matching
 
 ### Application Layer (`src/app/`)
+
 - EventDispatcher: routes events through RulesEngine and publishes
 - ResponseConsumer: handles outgoing responses
 - ReceiverService: orchestrator wiring all components
@@ -32,6 +34,7 @@ RabbitMQ (tg-if.responses) → Consumer → ResponseConsumer → TelegramClient 
 - LogBuffer: in-memory ring buffer for structlog
 
 ### Infrastructure Layer (`src/infrastructure/`)
+
 - config.py: AppConfig via env vars + bots.json
 - telegram/client.py: Pyrofork client wrapper (6 send methods)
 - telegram/handlers.py: event conversion from MTProto to domain entities
@@ -42,10 +45,12 @@ RabbitMQ (tg-if.responses) → Consumer → ResponseConsumer → TelegramClient 
 - metrics_exporter.py: Prometheus /metrics endpoint
 
 ### AMQP Topology
+
 - **tg-if.events** (topic, durable): incoming event routing keys
 - **tg-if.responses** (direct, durable): outgoing.responses queue
 
 ## Key Decisions
+
 - Pyrofork (MTProto) over HTTP Bot API
 - Regular RabbitMQ AMQP (not Streams)
 - Internal retry over NACK requeue
