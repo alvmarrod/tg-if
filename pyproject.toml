@@ -10,6 +10,7 @@ dependencies = [
     "aio-pika>=9.4.0",
     "aiohttp>=3.10.0",
     "structlog>=25.1.0",
+    "prometheus-client>=0.21.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -15,6 +15,7 @@ from domain.entities import RoutingContext, TelegramEvent
 from infrastructure.broker import Consumer, RabbitMQManager, Publisher
 from infrastructure.config import AppConfig, BotConfig
 from infrastructure.health import create_health_server
+from infrastructure import metrics_exporter as prom
 from infrastructure.telegram.client import TelegramClient
 
 
@@ -79,11 +80,13 @@ class ReceiverService:
 
     async def _on_event(self, event: TelegramEvent, context: RoutingContext) -> None:
         self._metrics.event_received(event.bot_id)
+        prom.events_received.labels(bot=event.bot_id).inc()
         await self._dispatcher.dispatch(event, context)
 
     async def _on_response_failed(self, body: dict[str, Any], exc: Exception) -> None:
         logger.error("response permanently failed", error=str(exc))
         self._metrics.response_failed()
+        prom.responses_failed.inc()
         if self._notifier:
             await self._notifier.notify(
                 AdminSignalType.RESPONSE_FAILED, body=body, exc=exc
@@ -95,6 +98,7 @@ class ReceiverService:
 
             try:
                 broker_ok = await self._manager.health()
+                prom.broker_connected.set(1 if broker_ok else 0)
                 await self._check_transition(
                     "broker", broker_ok, self._last_health.get("broker")
                 )
@@ -105,6 +109,7 @@ class ReceiverService:
             for name, client in self._clients.items():
                 try:
                     ok = await client.health()
+                    prom.client_connected.labels(bot=name).set(1 if ok else 0)
                     await self._check_transition(name, ok, self._last_health.get(name))
                     self._last_health[name] = ok
                 except Exception:

@@ -4,6 +4,7 @@ import structlog
 
 from app.metrics import ServiceMetrics
 from domain.entities import OutgoingResponse
+from infrastructure import metrics_exporter as prom
 from infrastructure.telegram.client import TelegramClient
 
 
@@ -28,6 +29,7 @@ class ResponseConsumer:
 
         if self._metrics:
             self._metrics.response_consumed()
+        prom.responses_consumed.inc()
 
         await self._send(client, response)
 
@@ -46,6 +48,7 @@ class ResponseConsumer:
             await method(chat_id=response.chat_id, **response.payload)
             if self._metrics:
                 self._metrics.response_sent()
+            prom.responses_sent.inc()
             logger.info(
                 "response sent",
                 bot_id=response.bot_id,

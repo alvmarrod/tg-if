@@ -6,6 +6,7 @@ import structlog
 
 from app.metrics import ServiceMetrics
 from domain.entities import RoutingContext, TelegramEvent
+from infrastructure import metrics_exporter as prom
 from domain.rules import RoutingDecision, RoutingRule, RulesEngine, resolve_subtype
 from infrastructure.broker import Publisher
 from infrastructure.config import BotConfig
@@ -41,10 +42,12 @@ class EventDispatcher:
         if decision.matched and decision.target:
             if self._metrics:
                 self._metrics.event_matched(event.bot_id)
+            prom.events_matched.labels(bot=event.bot_id).inc()
             envelope = self._build_envelope(event, context, decision.target)
             await self._publisher.publish(decision.target, envelope)
             if self._metrics:
                 self._metrics.event_published(event.bot_id)
+            prom.events_published.labels(bot=event.bot_id).inc()
             logger.info(
                 "event routed",
                 bot=event.bot_id,

@@ -50,6 +50,7 @@ Telegram API Receiver service that connects multiple Telegram accounts via MTPro
 - **Health monitoring**: Service health and session status endpoints
 - **Admin bot**: Dedicated Telegram bot for control-plane alerts and interactive commands
 - **Producer-consumer metrics**: Per-bot event counters (received → matched → published) and response funnel (consumed → sent → failed)
+- **Prometheus `/metrics` endpoint**: Export all counters and gauges for external scraping
 
 ## 🚀 Configuration
 
@@ -290,6 +291,7 @@ tg-if/
 │   └── infrastructure/        # External integrations
 │       ├── __init__.py
 │       ├── config.py          # Configuration loader
+│       ├── metrics_exporter.py  # Prometheus metric definitions
 │       ├── telegram/
 │       │   ├── __init__.py
 │       │   ├── client.py      # Pyrofork client wrapper
@@ -341,6 +343,32 @@ Response:
   "uptime_seconds": 3600
 }
 ```
+
+## 📈 Prometheus Metrics
+
+Service exposes a Prometheus metrics endpoint alongside the health check:
+
+```bash
+GET http://localhost:8080/metrics
+```
+
+Returns counters and gauges in Prometheus text format (`Content-Type: text/plain; version=0.0.4`).
+
+### Exported Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `tg_if_events_received_total` | Counter | `bot` | Events received from Telegram |
+| `tg_if_events_matched_total` | Counter | `bot` | Events matched by the rules engine |
+| `tg_if_events_published_total` | Counter | `bot` | Events published to RabbitMQ |
+| `tg_if_responses_consumed_total` | Counter | — | Responses consumed from `outgoing.responses` |
+| `tg_if_responses_sent_total` | Counter | — | Responses sent to Telegram |
+| `tg_if_responses_failed_total` | Counter | — | Responses that permanently failed after retries |
+| `tg_if_broker_connected` | Gauge | — | Broker connection status (1/0) |
+| `tg_if_client_connected` | Gauge | `bot` | Telegram client connection status (1/0) |
+| `tg_if_uptime_seconds` | Gauge | — | Service uptime in seconds |
+
+The endpoint requires no authentication — secure it via network-level access control (firewall, reverse proxy).
 
 ## 🤖 Admin Bot
 
@@ -415,7 +443,7 @@ Telegram → received → [rules engine] → matched → [publish] → published
                                                               Subscribers → responses → consumed → sent/failed
 ```
 
-Each stage is independently counted per bot. Future work could export these as Prometheus metrics for Grafana dashboards.
+Each stage is independently counted per bot. These counters are also exported via the Prometheus `/metrics` endpoint for external scraping and dashboards.
 
 ## 📝 Logging
 
