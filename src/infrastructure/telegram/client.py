@@ -34,9 +34,13 @@ class TelegramClient:
         self,
         config: BotConfig,
         event_callback: EventCallback | None = None,
+        on_connect: Callable[[], Awaitable[None]] | None = None,
+        on_disconnect: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._bot_id = config.name
         self._event_callback = event_callback
+        self._on_connect_cb = on_connect
+        self._on_disconnect_cb = on_disconnect
         name, workdir = parse_session_path(config.session_file)
         self._client = pyrogram.Client(
             name=name,
@@ -46,6 +50,8 @@ class TelegramClient:
         )
         self._client.on_message()(self._on_message)
         self._client.on_callback_query()(self._on_callback_query)
+        self._client.on_connect()(self._on_connect_handler)  # type: ignore[attr-defined]
+        self._client.on_disconnect()(self._on_disconnect_handler)
 
     @property
     def bot_id(self) -> str:
@@ -200,6 +206,16 @@ class TelegramClient:
         if reply_to_message_id is not None:
             kwargs["reply_to_message_id"] = reply_to_message_id
         return await self._client.send_media_group(chat_id=chat_id, **kwargs)
+
+    async def _on_connect_handler(self, client: pyrogram.Client) -> None:
+        logger.info("telegram client connected", bot=self._bot_id)
+        if self._on_connect_cb:
+            await self._on_connect_cb()
+
+    async def _on_disconnect_handler(self, client: pyrogram.Client) -> None:
+        logger.warning("telegram client disconnected", bot=self._bot_id)
+        if self._on_disconnect_cb:
+            await self._on_disconnect_cb()
 
     async def _on_message(self, client: pyrogram.Client, message: Message) -> None:
         if self._event_callback is None:

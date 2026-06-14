@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 from typing import Any
 
 import structlog
@@ -42,7 +43,12 @@ class ReceiverService:
 
         clients: dict[str, TelegramClient] = {}
         for bot_cfg in config.bots:
-            client = TelegramClient(bot_cfg, self._on_event)
+            client = TelegramClient(
+                bot_cfg,
+                self._on_event,
+                on_connect=partial(self._on_client_connected, bot_cfg.name),
+                on_disconnect=partial(self._on_client_disconnected, bot_cfg.name),
+            )
             clients[bot_cfg.name] = client
         self._clients = clients
 
@@ -92,6 +98,22 @@ class ReceiverService:
                 AdminSignalType.RESPONSE_FAILED, body=body, exc=exc
             )
 
+    async def _on_client_connected(self, name: str) -> None:
+        logger.info("client connected", bot=name)
+        prom.client_connected.labels(bot=name).set(1)
+        if self._notifier:
+            await self._notifier.notify(
+                AdminSignalType.COMPONENT_CONNECTED, component=name
+            )
+
+    async def _on_client_disconnected(self, name: str) -> None:
+        logger.warning("client disconnected", bot=name)
+        prom.client_connected.labels(bot=name).set(0)
+        if self._notifier:
+            await self._notifier.notify(
+                AdminSignalType.COMPONENT_DISCONNECTED, component=name
+            )
+
     async def _health_monitor(self) -> None:
         while True:
             await asyncio.sleep(60)
@@ -105,15 +127,6 @@ class ReceiverService:
                 self._last_health["broker"] = broker_ok
             except Exception:
                 logger.exception("health check failed for broker")
-
-            for name, client in self._clients.items():
-                try:
-                    ok = await client.health()
-                    prom.client_connected.labels(bot=name).set(1 if ok else 0)
-                    await self._check_transition(name, ok, self._last_health.get(name))
-                    self._last_health[name] = ok
-                except Exception:
-                    logger.exception("health check failed", client=name)
 
             if self._notifier:
                 try:
