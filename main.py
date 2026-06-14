@@ -7,22 +7,25 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 import structlog
 
+from app.log_buffer import LogBuffer
 from app.receiver_service import ReceiverService
 from infrastructure.config import ConfigLoader
 
 
 async def main() -> None:
     config = ConfigLoader.load()
+    log_buffer = LogBuffer()
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt="iso"),
+            log_buffer.processor,
             structlog.dev.ConsoleRenderer(),
         ],
         cache_logger_on_first_use=True,
     )
     logger = structlog.get_logger()
 
-    service = ReceiverService(config)
+    service = ReceiverService(config, log_buffer=log_buffer)
     await service.start()
     logger.info("starting", version="0.1.0", bots=[b.name for b in config.bots])
 

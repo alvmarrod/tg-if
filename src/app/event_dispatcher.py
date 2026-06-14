@@ -4,6 +4,7 @@ from typing import Any
 
 import structlog
 
+from app.metrics import ServiceMetrics
 from domain.entities import RoutingContext, TelegramEvent
 from domain.rules import RoutingDecision, RoutingRule, RulesEngine, resolve_subtype
 from infrastructure.broker import Publisher
@@ -14,11 +15,17 @@ logger = structlog.get_logger()
 
 
 class EventDispatcher:
-    def __init__(self, configs: list[BotConfig], publisher: Publisher) -> None:
+    def __init__(
+        self,
+        configs: list[BotConfig],
+        publisher: Publisher,
+        metrics: ServiceMetrics | None = None,
+    ) -> None:
         self._rules: dict[str, list[RoutingRule]] = {}
         for c in configs:
             self._rules[c.name] = c.routing_rules
         self._publisher = publisher
+        self._metrics = metrics
 
     async def dispatch(
         self,
@@ -32,8 +39,12 @@ class EventDispatcher:
         decision = RulesEngine.evaluate(event, context, rules)
 
         if decision.matched and decision.target:
+            if self._metrics:
+                self._metrics.event_matched(event.bot_id)
             envelope = self._build_envelope(event, context, decision.target)
             await self._publisher.publish(decision.target, envelope)
+            if self._metrics:
+                self._metrics.event_published(event.bot_id)
             logger.info(
                 "event routed",
                 bot=event.bot_id,

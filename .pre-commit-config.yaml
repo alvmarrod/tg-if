@@ -10,18 +10,17 @@ repos:
 
       - id: ruff-format
         name: ruff format
-        entry: docker run --rm -v .:/work -w /work ghcr.io/astral-sh/ruff:latest format --check
+        entry: docker run --rm -v .:/work -w /work ghcr.io/astral-sh/ruff:latest format
         language: system
         types: [python]
         pass_filenames: true
 
       - id: markdownlint
         name: markdownlint
-        entry: docker run --rm -v .:/work -w /work ghcr.io/igorshubovych/markdownlint-cli:latest markdownlint
+        entry: docker run --rm -v .:/work -w /work ghcr.io/igorshubovych/markdownlint-cli:latest markdownlint --fix
         language: system
         types: [markdown]
         files: ^(README|CHANGELOG)\.md$
-        args: ["--fix"]
 
       - id: mypy
         name: mypy

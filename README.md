@@ -48,6 +48,8 @@ Telegram API Receiver service that connects multiple Telegram accounts via MTPro
 - **Bidirectional flow**: Receive events from Telegram and send responses back
 - **Session persistence**: MTProto sessions stored in `sessions/`
 - **Health monitoring**: Service health and session status endpoints
+- **Admin bot**: Dedicated Telegram bot for control-plane alerts and interactive commands
+- **Producer-consumer metrics**: Per-bot event counters (received → matched → published) and response funnel (consumed → sent → failed)
 
 ## 🚀 Configuration
 
@@ -271,6 +273,10 @@ tg-if/
 │   │
 │   ├── app/                   # Application layer
 │   │   ├── __init__.py
+│   │   ├── admin_commands.py      # Admin bot interactive command handler
+│   │   ├── admin_notifier.py      # Admin bot notification dispatcher
+│   │   ├── log_buffer.py          # In-memory ring buffer for structlog
+│   │   ├── metrics.py             # Producer-consumer metrics counters
 │   │   ├── receiver_service.py    # Orchestrates sessions and event loop
 │   │   ├── event_dispatcher.py    # Rules engine and routing logic
 │   │   └── response_consumer.py   # Consumes outgoing responses
@@ -298,9 +304,13 @@ tg-if/
     ├── __init__.py
     ├── unit/
     │   ├── __init__.py
+    │   ├── test_admin_commands.py
+    │   ├── test_admin_notifier.py
+    │   ├── test_consumer_retry.py
     │   ├── test_event_dispatcher.py
-    │   ├── test_rules_engine.py
-    │   └── test_response_consumer.py
+    │   ├── test_metrics.py
+    │   ├── test_response_consumer.py
+    │   └── test_rules_engine.py
     ├── integration/
     │   ├── __init__.py
     │   ├── test_telegram_flow.py
@@ -331,6 +341,81 @@ Response:
   "uptime_seconds": 3600
 }
 ```
+
+## 🤖 Admin Bot
+
+A dedicated Telegram bot provides control-plane alerts and interactive management commands.
+
+### Setup
+
+Add an `admin` block to `config/bots.json`:
+
+```json
+{
+  "admin": {
+    "api_id": 99999,
+    "api_hash": "your_admin_bot_hash",
+    "session_file": "sessions/admin.session",
+    "user_id": 123456789
+  }
+}
+```
+
+`user_id` is the Telegram user ID that receives notifications and can issue commands. The admin bot uses its own MTProto session (separate from event-processing bots).
+
+### Notifications
+
+The admin bot automatically sends alerts for control-plane events:
+
+| Signal | Trigger |
+|--------|---------|
+| `⚠️ Response Failed` | A subscriber response permanently failed after max retries |
+| `✅ {component} connected` | Broker or bot transitions from disconnected → connected |
+| `❌ {component} disconnected` | Broker or bot transitions from connected → disconnected |
+
+Health is checked every 60 seconds. Notifications are sent on state transitions only (no repeated alerts for stable states).
+
+### Interactive Commands
+
+DM the admin bot to execute commands:
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/status` | Service status with connection states and producer-consumer metrics |
+| `/bots` | List configured bots and rule counts |
+| `/rules --bot <name>` | Show routing rules for a specific bot (omit `--bot` for all) |
+| `/log [count]` | Show recent log entries (default 20) |
+
+Example `/status` output:
+
+```text
+📊 Service Status  |  uptime: 2h 15m
+
+Connections:
+  broker       ✅
+  aibot        ✅
+  supportbot   ✅
+  admin        ✅
+
+Incoming events:
+  aibot       recv: 142 → match: 138 → publish: 138
+  supportbot  recv: 89  → match: 85  → publish: 85
+
+Outgoing responses:
+  consumed: 203 → sent: 200 → failed: 3
+```
+
+### Metrics Funnel
+
+The service tracks a producer-consumer relationship through each stage:
+
+```text
+Telegram → received → [rules engine] → matched → [publish] → published → RabbitMQ
+                                                              Subscribers → responses → consumed → sent/failed
+```
+
+Each stage is independently counted per bot. Future work could export these as Prometheus metrics for Grafana dashboards.
 
 ## 📝 Logging
 
@@ -368,8 +453,8 @@ docker run -d \
 ## 🔧 Development
 
 ```bash
-# Install dependencies
-uv sync --dev
+# Install dependencies (including dev)
+uv sync --all-extras
 
 # Run tests
 uv run pytest
@@ -382,4 +467,7 @@ uv run ruff check src/
 
 # Format code
 uv run ruff format src/
+
+# Install pre-commit hooks (ruff via Docker, mypy on host)
+pre-commit install
 ```

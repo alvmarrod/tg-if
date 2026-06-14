@@ -44,9 +44,8 @@ class TelegramClient:
             api_hash=config.api_hash,
             workdir=workdir,
         )
-        if event_callback is not None:
-            self._client.on_message()(self._on_message)
-            self._client.on_callback_query()(self._on_callback_query)
+        self._client.on_message()(self._on_message)
+        self._client.on_callback_query()(self._on_callback_query)
 
     @property
     def bot_id(self) -> str:
@@ -69,6 +68,9 @@ class TelegramClient:
             logger.warning(
                 "telegram client stop error", bot=self._bot_id, exc_info=True
             )
+
+    def set_event_callback(self, callback: EventCallback) -> None:
+        self._event_callback = callback
 
     async def health(self) -> bool:
         return self._client.is_connected if self._client else False
