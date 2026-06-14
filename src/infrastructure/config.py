@@ -23,11 +23,22 @@ class BotConfig(BaseModel):
     routing_rules: list[RoutingRule] = Field(default_factory=list)
 
 
+class AdminBotConfig(BaseModel):
+    name: str = "__admin__"
+    api_id: int
+    api_hash: str
+    session_file: str = "sessions/admin.session"
+    user_id: int = Field(
+        ..., description="Telegram user ID that receives notifications"
+    )
+
+
 class AppConfig(BaseModel):
     log_level: str = Field(default="INFO")
     health_port: int = Field(default=8080)
     broker: BrokerConfig = Field(default_factory=BrokerConfig)
     bots: list[BotConfig] = Field(default_factory=list)
+    admin: AdminBotConfig | None = None
 
 
 class ConfigLoader:
@@ -53,11 +64,15 @@ class ConfigLoader:
         )
 
         bots: list[BotConfig] = []
+        admin_config: AdminBotConfig | None = None
         bots_file = Path(bots_path)
         if bots_file.exists():
             raw = json.loads(bots_file.read_text())
             for entry in raw.get("bots", []):
                 bots.append(BotConfig.model_validate(entry))
+            admin_data = raw.get("admin")
+            if admin_data:
+                admin_config = AdminBotConfig.model_validate(admin_data)
         else:
             msg = f"Bot configuration file not found: {bots_file}"
             raise FileNotFoundError(msg)
@@ -67,4 +82,5 @@ class ConfigLoader:
             health_port=cls._env_int("HEALTH_CHECK_PORT", 8080),
             broker=broker,
             bots=bots,
+            admin=admin_config,
         )

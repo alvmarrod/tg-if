@@ -30,7 +30,11 @@ def _parse_mode(value: str | None) -> ParseMode | None:
 
 
 class TelegramClient:
-    def __init__(self, config: BotConfig, event_callback: EventCallback) -> None:
+    def __init__(
+        self,
+        config: BotConfig,
+        event_callback: EventCallback | None = None,
+    ) -> None:
         self._bot_id = config.name
         self._event_callback = event_callback
         name, workdir = parse_session_path(config.session_file)
@@ -40,8 +44,9 @@ class TelegramClient:
             api_hash=config.api_hash,
             workdir=workdir,
         )
-        self._client.on_message()(self._on_message)
-        self._client.on_callback_query()(self._on_callback_query)
+        if event_callback is not None:
+            self._client.on_message()(self._on_message)
+            self._client.on_callback_query()(self._on_callback_query)
 
     @property
     def bot_id(self) -> str:
@@ -195,11 +200,15 @@ class TelegramClient:
         return await self._client.send_media_group(chat_id=chat_id, **kwargs)
 
     async def _on_message(self, client: pyrogram.Client, message: Message) -> None:
+        if self._event_callback is None:
+            return
         event = message_to_event(self._bot_id, message)
         context = extract_routing_context(message)
         await self._event_callback(event, context)
 
     async def _on_callback_query(self, client: pyrogram.Client, query: Any) -> None:
+        if self._event_callback is None:
+            return
         event = callback_to_event(self._bot_id, query)
         context = context_from_callback(query)
         await self._event_callback(event, context)
