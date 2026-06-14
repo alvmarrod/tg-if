@@ -32,7 +32,7 @@ The core distinction vs. the Bot HTTP API: Pyrofork (MTProto) bypasses Bot API l
 
 See `README.md` for full diagram. Key flow:
 
-```
+```text
 Telegram --(MTProto)--> tg-if --(RabbitMQ AMQP)--> Subscribers
                            ^                             |
                            |-- outgoing.responses <-------|
@@ -40,7 +40,7 @@ Telegram --(MTProto)--> tg-if --(RabbitMQ AMQP)--> Subscribers
 
 ### AMQP Topology
 
-```
+```text
 Exchange: tg-if.events (topic, durable)
   Routing keys: incoming.events.{bot}.{type}.{subtype}
   Each subscriber creates its own queue bound to this exchange

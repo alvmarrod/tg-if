@@ -9,5 +9,6 @@
     "style": "consistent"
   },
   "blanks-around-fences": true,
-  "blanks-around-lists": true
+  "blanks-around-lists": true,
+  "ignores": [".venv/**"]
 }
