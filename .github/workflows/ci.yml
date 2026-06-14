@@ -26,7 +26,9 @@ jobs:
       - name: markdownlint
         uses: DavidAnson/markdownlint-cli2-action@v23
         with:
-          globs: '**/*.md'
+          globs: |
+            **/*.md
+            !.venv/**
 
   docker:
     needs: check
