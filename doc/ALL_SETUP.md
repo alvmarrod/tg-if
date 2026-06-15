@@ -1,5 +1,7 @@
 # Telegram Bot Microservices Architecture
 
+> **Note:** This document reflects early design (RabbitMQ Streams era). Current architecture is documented in `doc/architecture_overview.md` and subsystem docs (`doc/subsystems/*.md`). Media retrieval design: `doc/media_retrieval.md`.
+
 ## System Overview
 
 A scalable microservices architecture for building advanced Telegram bots with decoupled business logic. The system uses Pyrofork for direct MTProto API access, RabbitMQ Streams for message ordering, and independent subscriber services for feature implementation.

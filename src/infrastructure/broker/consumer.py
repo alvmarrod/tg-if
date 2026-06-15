@@ -47,6 +47,9 @@ class Consumer:
         if self._queue_name == "outgoing.responses":
             exchange = await self._channel.get_exchange("tg-if.responses")
             await queue.bind(exchange, routing_key="response")
+        elif self._queue_name == "media-config":
+            exchange = await self._channel.get_exchange("tg-if.responses")
+            await queue.bind(exchange, routing_key="media-config")
 
         self._task = asyncio.create_task(self._run(queue))
 

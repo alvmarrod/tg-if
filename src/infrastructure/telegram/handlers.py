@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from pyrogram.types import (
     CallbackQuery,
@@ -14,6 +15,60 @@ from domain.entities import (
     MessageEvent,
     RoutingContext,
 )
+
+
+_MEDIA_ATTRS = [
+    "photo",
+    "video",
+    "audio",
+    "document",
+    "animation",
+    "voice",
+    "video_note",
+    "sticker",
+]
+
+_MEDIA_EXTENSION: dict[str, str] = {
+    "photo": "jpg",
+    "video": "mp4",
+    "audio": "mp3",
+    "document": "bin",
+    "animation": "gif",
+    "voice": "ogg",
+    "video_note": "mp4",
+    "sticker": "webp",
+}
+
+
+def _extract_media_info(
+    message: Message,
+) -> tuple[str | None, str | None, dict[str, Any]]:
+    for attr in _MEDIA_ATTRS:
+        media_obj = getattr(message, attr, None)
+        if media_obj is None:
+            continue
+        file_id: str | None = getattr(media_obj, "file_id", None)
+        file_unique_id: str | None = getattr(media_obj, "file_unique_id", None)
+        raw: dict[str, Any] = {
+            "file_id": file_id,
+            "file_unique_id": file_unique_id,
+        }
+        for field in (
+            "file_size",
+            "mime_type",
+            "width",
+            "height",
+            "duration",
+            "title",
+            "performer",
+            "file_name",
+            "emoji",
+        ):
+            val = getattr(media_obj, field, None)
+            if val is not None:
+                raw[field] = val
+        return file_id, file_unique_id, raw
+    return None, None, {}
 
 
 def _detect_command(text: str | None) -> tuple[str | None, list[str]]:
@@ -43,6 +98,10 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
     has_media = message.media is not None
     media_type = str(message.media.value) if message.media else None
 
+    file_id, file_unique_id, media_raw = (
+        _extract_media_info(message) if has_media else (None, None, {})
+    )
+
     return MessageEvent(
         event_id=str(message.id),
         bot_id=bot_id,
@@ -53,7 +112,9 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
         caption=message.caption,
         has_media=has_media,
         media_type=media_type,
-        raw_payload={},
+        file_id=file_id,
+        file_unique_id=file_unique_id,
+        raw_payload=media_raw,
     )
 
 

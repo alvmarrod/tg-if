@@ -10,6 +10,14 @@
 - `EventType` — Enum: message, command, callback_query
 - `ChatType` — Enum: private, group, supergroup, channel
 
+## Media Entities (future)
+
+Full design: `doc/media_retrieval.md`
+
+- `TelegramEvent` gains fields: `file_id`, `file_unique_id`, `media_status` ("pending" / "ready"), `media_url`
+- `MediaConfigRule` — scope (global/chat/user), target (chat_id/user_id), content_types (list), action (eager/lazy)
+- `MediaReadyEvent` — status update event type, references original event via `file_unique_id`
+
 ## Rules Engine (`rules.py`)
 
 - `RoutingRule` — condition dict + target routing key

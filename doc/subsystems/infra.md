@@ -44,6 +44,35 @@
 - GET /health — JSON status
 - GET /metrics — Prometheus text format
 
+## Media Retrieval (`media/` — future)
+
+Full design: `doc/media_retrieval.md`
+
+### HTTP File Endpoint (on health server)
+
+- `GET /files/{bot_id}/{file_id}` — streams media on demand via Pyrofork
+- Checks disk cache first (by `file_unique_id`), falls back to lazy download from Telegram
+- Write-through: lazy downloads populate the cache for subsequent requests
+- Integrated into existing health aiohttp server
+
+### Disk Cache Store
+
+- Files stored at `/data/media/{bot_id}/{file_unique_id}.{ext}`
+- Tracks access count, last access time, stored timestamp
+- Dedup: same `file_unique_id` → single file regardless of forwards or repeats
+
+### Media Config Consumer (future)
+
+- Consumes from `tg-if.media-config` AMQP queue
+- Subscribers publish media download policy rules (eager/lazy per scope)
+- In-memory rule store (persistence TBD)
+
+### Eager Download Background Task (future)
+
+- On event receipt, checks config for eager match
+- If match: async download to disk cache in background
+- Does not block event publication
+
 ## Metrics Exporter (`metrics_exporter.py`)
 
 - Prometheus Counter and Gauge objects
