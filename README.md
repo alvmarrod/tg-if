@@ -485,8 +485,14 @@ docker run -d \
 # Install dependencies (including dev)
 uv sync --all-extras
 
-# Run tests
+# Run unit tests (default, integration tests excluded)
 uv run pytest
+
+# Run integration tests (requires Docker running locally)
+uv run pytest -m integration
+
+# Run all tests (including integration)
+uv run pytest -m ""
 
 # Type checking
 uv run mypy src/
