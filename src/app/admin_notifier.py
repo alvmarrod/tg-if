@@ -16,6 +16,7 @@ class AdminSignalType(str, Enum):
     RESPONSE_FAILED = "response_failed"
     COMPONENT_CONNECTED = "component_connected"
     COMPONENT_DISCONNECTED = "component_disconnected"
+    CONFIG_WARNING = "config_warning"
 
 
 def _format_signal(signal_type: AdminSignalType, **kwargs: Any) -> str:
@@ -36,6 +37,11 @@ def _format_signal(signal_type: AdminSignalType, **kwargs: Any) -> str:
 
     if signal_type == AdminSignalType.COMPONENT_DISCONNECTED:
         return f"❌ {kwargs.get('component', '?')} disconnected"
+
+    if signal_type == AdminSignalType.CONFIG_WARNING:
+        msg = kwargs.get("message", "?")
+        body = kwargs.get("body", {})
+        return f"⚠️ Config Warning\nMessage: {msg}\nBody: {body}"
 
     return f"Unknown signal: {signal_type}"
 

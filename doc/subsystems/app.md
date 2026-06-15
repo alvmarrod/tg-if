@@ -47,3 +47,21 @@
 ## LogBuffer
 
 - Ring buffer (max 200 entries) as structlog processor
+
+## Media Components (future)
+
+Full design: `doc/media_retrieval.md`
+
+### MediaConfigManager
+
+- Holds eager/lazy rules in memory (global, chat, user, content_type scopes)
+- Applies precedence: user > chat > content_type > global
+- Evaluates an event against rules → returns `eager` or `lazy`
+- Updated via AdminCommandHandler or AMQP config consumer
+
+### MediaDownloader
+
+- Background async task triggered on eager-matched events
+- Downloads media via Pyrofork `download_media(file_id, in_memory=True)`
+- Writes to disk cache keyed by `file_unique_id`
+- Runs concurrently with event publication (non-blocking)

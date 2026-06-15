@@ -62,6 +62,21 @@ class MessageEvent(TelegramEvent):
     caption: Optional[str] = None
     media_type: Optional[str] = None
     has_media: bool = False
+    file_id: Optional[str] = Field(
+        default=None, description="Telegram file_id (session-specific, can download)"
+    )
+    file_unique_id: Optional[str] = Field(
+        default=None,
+        description="Telegram file_unique_id (permanent, content-based dedup key)",
+    )
+    media_status: str = Field(
+        default="pending",
+        description='Media availability: "pending" or "ready"',
+    )
+    media_url: Optional[str] = Field(
+        default=None,
+        description="URL to fetch the media via tg-if HTTP proxy",
+    )
 
 
 class CommandEvent(TelegramEvent):
@@ -83,6 +98,43 @@ class CallbackQueryEvent(TelegramEvent):
     callback_id: str = Field(..., description="Telegram callback query ID")
     callback_data: str = Field(..., description="Data attached to button")
     message_id: Optional[int] = None
+
+
+class MediaScope(str, Enum):
+    """Scope for media config rules."""
+
+    GLOBAL = "global"
+    CHAT = "chat"
+    USER = "user"
+
+
+class MediaConfigRule(BaseModel):
+    """Rule controlling eager/lazy media download behavior."""
+
+    scope: MediaScope
+    scope_id: Optional[str] = Field(
+        default=None, description="chat_id or user_id; None for global"
+    )
+    content_types: list[str] = Field(
+        default_factory=lambda: ["all"],
+        description="Media types this rule applies to, or ['all']",
+    )
+    action: str = Field(..., description='"eager" or "lazy"')
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class MediaReadyEvent(BaseModel):
+    """Published when eager download completes and media is cached."""
+
+    file_unique_id: str
+    file_id: str
+    media_url: str
+    original_event_id: str
+    bot_id: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class OutgoingResponse(BaseModel):

@@ -36,6 +36,14 @@ class AdminBotConfig(BaseModel):
 class AppConfig(BaseModel):
     log_level: str = Field(default="INFO")
     health_port: int = Field(default=8080)
+    media_base_url: str = Field(
+        default="http://localhost:8080",
+        description="Base URL for the /files/ media retrieval endpoint",
+    )
+    media_cache_path: str = Field(
+        default="/data/media",
+        description="Filesystem path for the media disk cache",
+    )
     broker: BrokerConfig = Field(default_factory=BrokerConfig)
     bots: list[BotConfig] = Field(default_factory=list)
     admin: AdminBotConfig | None = None
@@ -80,6 +88,8 @@ class ConfigLoader:
         return AppConfig(
             log_level=cls._env_str("LOG_LEVEL", "INFO"),
             health_port=cls._env_int("HEALTH_CHECK_PORT", 8080),
+            media_base_url=cls._env_str("MEDIA_BASE_URL", "http://localhost:8080"),
+            media_cache_path=cls._env_str("MEDIA_CACHE_PATH", "/data/media"),
             broker=broker,
             bots=bots,
             admin=admin_config,
