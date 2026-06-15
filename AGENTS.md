@@ -24,6 +24,8 @@ The core distinction vs. the Bot HTTP API: Pyrofork (MTProto) bypasses Bot API l
 | Tests | `tests/*` | Empty stubs |
 | Config files | `config/bots.json` | Populated |
 | Config files | `.env.example` | Populated |
+| Media retrieval design | `doc/media_retrieval.md` | Approved |
+| Media retrieval roadmap | `.agent/media-retrieval-roadmap.md` | — |
 | Dockerfile | `Dockerfile` | Empty stub |
 | Makefile | `Makefile` | Empty stub |
 | Entrypoint | `main.py` | Implemented (async, ReceiverService) |
@@ -36,7 +38,12 @@ See `README.md` for full diagram. Key flow:
 Telegram --(MTProto)--> tg-if --(RabbitMQ AMQP)--> Subscribers
                            ^                             |
                            |-- outgoing.responses <-------|
+                           |                             |
+                           |-- GET /files/ (media fetch) -|
+                               (HTTP, not AMQP)
 ```
+
+Media retrieval design: `doc/media_retrieval.md` — hybrid eager/lazy cache layer with on-demand HTTP proxy.
 
 ### AMQP Topology
 
@@ -77,10 +84,13 @@ Exchange: tg-if.responses (direct, durable)
 | Single service managing all bots | Instead of one process per bot; simpler ops, shared broker connection |
 | Internal retry over NACK requeue | Transparent retry inside Consumer preserves ordering, avoids message pollution with headers |
 | OutgoingResponse uses raw dict payload | Avoids premature schema pinning per response type; payload maps directly to send_* kwargs |
+| Hybrid eager/lazy media retrieval (`doc/media_retrieval.md`) | Immediate event publication + write-through HTTP cache; config controls timing of first download only; avoids blocking on download |
 
 ## Implementation Roadmap
 
-Per `doc/Hybrid approach.md`:
+Per `doc/media_retrieval.md`: implementation deferred; see doc for full design.
+
+Per `doc/Hybrid approach.md` (legacy):
 
 1. **Phase 1 — Foundation**: Domain data structures, config loading, basic logging (done)
 2. **Phase 2 — Vertical Slice**: Single bot receive -> publish to broker -> consume response -> send to Telegram (done)

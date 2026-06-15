@@ -1,5 +1,7 @@
 # LLD
 
+> **Note:** This document reflects early design. Current architecture is documented in `doc/architecture_overview.md` and subsystem docs (`doc/subsystems/*.md`). Media retrieval design: `doc/media_retrieval.md`.
+
 ## **Data Structures**
 
 | Domain | Type | Description |

@@ -8,13 +8,17 @@ tg-if is a Telegram MTProto gateway service that receives events via Pyrofork, r
 
 ```text
 Telegram → Pyrofork → EventDispatcher → Publisher → RabbitMQ (tg-if.events)
-                                                                          ↓
-                                                              Subscriber Services
-                                                                          ↓
-                                                              outgoing.responses
-                                                                          ↓
+                                                                           ↓
+                                                               Subscriber Services
+                                                                           ↓
+                                                               outgoing.responses
+                                                                           ↓
 RabbitMQ (tg-if.responses) → Consumer → ResponseConsumer → TelegramClient → Telegram
+
+Subscriber → GET /files/{bot_id}/{file_id} → tg-if (HTTP proxy) → Telegram (on demand)
 ```
+
+Media files flow through a separate HTTP path: see `doc/media_retrieval.md` for full design.
 
 ## Layers
 
@@ -41,8 +45,10 @@ RabbitMQ (tg-if.responses) → Consumer → ResponseConsumer → TelegramClient 
 - broker/rabbitmq.py: RabbitMQManager (topology: tg-if.events topic + tg-if.responses direct)
 - broker/publisher.py: publish to tg-if.events
 - broker/consumer.py: consume with transparent retry
-- health.py: aiohttp health server (port 8080)
+- health.py: aiohttp health server (port 8080) — also hosts GET /files/{bot_id}/{file_id} for media retrieval
 - metrics_exporter.py: Prometheus /metrics endpoint
+- media/ (future): disk cache store, HTTP proxy endpoint, eager download background task, media config consumer (`tg-if.media-config`)
+  - Full design: `doc/media_retrieval.md`
 
 ### AMQP Topology
 
@@ -56,3 +62,4 @@ RabbitMQ (tg-if.responses) → Consumer → ResponseConsumer → TelegramClient 
 - Internal retry over NACK requeue
 - Admin bot with dedicated session
 - Prometheus metrics via /metrics endpoint
+- Hybrid eager/lazy media retrieval (see `doc/media_retrieval.md`)

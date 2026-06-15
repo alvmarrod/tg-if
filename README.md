@@ -1,6 +1,6 @@
 # tg-if
 
-Telegram API Receiver service that connects multiple Telegram accounts via MTProto (Pyrofork), receives events, routes them through a rules engine, and publishes to RabbitMQ Streams for processing by subscriber services.
+Telegram MTProto gateway service that receives events via Pyrofork, routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
 
 ## 🧩 Architecture
 
@@ -28,7 +28,7 @@ Telegram API Receiver service that connects multiple Telegram accounts via MTPro
         │ Publish                      │ Consume
         ▼                              │
 ┌────────────────────────────────────────────────┐
-│         RabbitMQ Streams                       │
+│         RabbitMQ (AMQP)                        │
 │                                                 │
 │  • incoming.events.{bot}.{type}.{subtype}     │
 │  • outgoing.responses                          │
@@ -51,6 +51,7 @@ Telegram API Receiver service that connects multiple Telegram accounts via MTPro
 - **Admin bot**: Dedicated Telegram bot for control-plane alerts and interactive commands
 - **Producer-consumer metrics**: Per-bot event counters (received → matched → published) and response funnel (consumed → sent → failed)
 - **Prometheus `/metrics` endpoint**: Export all counters and gauges for external scraping
+- **Media retrieval**: Hybrid eager/lazy HTTP proxy for media files (see `doc/media_retrieval.md`)
 
 ## 🚀 Configuration
 

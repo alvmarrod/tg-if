@@ -10,13 +10,16 @@ from app.admin_commands import AdminCommandHandler
 from app.admin_notifier import AdminNotifier, AdminSignalType
 from app.event_dispatcher import EventDispatcher
 from app.log_buffer import LogBuffer
+from app.media_config import MediaConfigManager
+from app.media_downloader import MediaDownloader
 from app.metrics import ServiceMetrics
 from app.response_consumer import ResponseConsumer
-from domain.entities import RoutingContext, TelegramEvent
+from domain.entities import MediaConfigRule, RoutingContext, TelegramEvent
 from infrastructure.broker import Consumer, RabbitMQManager, Publisher
 from infrastructure.config import AppConfig, BotConfig
 from infrastructure.health import create_health_server
 from infrastructure import metrics_exporter as prom
+from infrastructure.media.storage import DiskStorage
 from infrastructure.telegram.client import TelegramClient
 
 
@@ -35,7 +38,10 @@ class ReceiverService:
         self._metrics = ServiceMetrics()
         self._log_buffer = log_buffer
         self._dispatcher = EventDispatcher(
-            config.bots, self._publisher, metrics=self._metrics
+            config.bots,
+            self._publisher,
+            metrics=self._metrics,
+            media_base_url=config.media_base_url,
         )
         self._health_site: Any = None
         self._health_task: asyncio.Task[None] | None = None
@@ -52,6 +58,8 @@ class ReceiverService:
             clients[bot_cfg.name] = client
         self._clients = clients
 
+        self._cache = DiskStorage(config.media_cache_path)
+        self._media_config = MediaConfigManager()
         notifier: AdminNotifier | None = None
         cmd_handler: AdminCommandHandler | None = None
         if config.admin is not None:
@@ -71,10 +79,19 @@ class ReceiverService:
                 config=config,
                 metrics=self._metrics,
                 log_buffer=self._log_buffer,
+                media_config=self._media_config,
+                storage=self._cache,
             )
             admin_client.set_event_callback(cmd_handler.handle)
         self._notifier = notifier
         self._cmd_handler = cmd_handler
+
+        self._media_downloader = MediaDownloader(
+            storage=self._cache,
+            clients=self._clients,
+            publisher=self._publisher,
+            media_base_url=config.media_base_url,
+        )
 
         self._response_consumer = ResponseConsumer(self._clients, metrics=self._metrics)
         self._consumer = Consumer(
@@ -83,11 +100,16 @@ class ReceiverService:
             self._response_consumer.handle,
             on_failed=self._on_response_failed,
         )
+        self._media_config_consumer: Consumer | None = None
 
     async def _on_event(self, event: TelegramEvent, context: RoutingContext) -> None:
         self._metrics.event_received(event.bot_id)
         prom.events_received.labels(bot=event.bot_id).inc()
         await self._dispatcher.dispatch(event, context)
+        try:
+            await self._media_downloader.on_event(event, context)
+        except Exception:
+            logger.exception("media downloader failed", bot=event.bot_id)
 
     async def _on_response_failed(self, body: dict[str, Any], exc: Exception) -> None:
         logger.error("response permanently failed", error=str(exc))
@@ -97,6 +119,19 @@ class ReceiverService:
             await self._notifier.notify(
                 AdminSignalType.RESPONSE_FAILED, body=body, exc=exc
             )
+
+    async def _on_media_config_message(self, body: dict[str, Any]) -> None:
+        try:
+            rule = MediaConfigRule.model_validate(body)
+            self._media_config.add_rule(rule)
+        except Exception:
+            logger.warning("invalid media config message", body=body, exc_info=True)
+            if self._notifier:
+                await self._notifier.notify(
+                    AdminSignalType.CONFIG_WARNING,
+                    message="Invalid media config message received via AMQP",
+                    body=body,
+                )
 
     async def _on_client_connected(self, name: str) -> None:
         logger.info("client connected", bot=name)
@@ -165,10 +200,23 @@ class ReceiverService:
         except Exception:
             logger.warning("response consumer not started", exc_info=True)
 
+        try:
+            mc = Consumer(
+                self._manager,
+                "media-config",
+                self._on_media_config_message,
+            )
+            await mc.start()
+            self._media_config_consumer = mc
+        except Exception:
+            logger.warning("media config consumer not started", exc_info=True)
+
         self._health_site = await create_health_server(
             self._config.health_port,
             broker=self._manager,
             clients=list(self._clients.values()),
+            client_map=self._clients,
+            storage=self._cache,
         )
 
         logger.info(
@@ -191,6 +239,8 @@ class ReceiverService:
         if self._notifier:
             await self._notifier.stop()
 
+        if self._media_config_consumer is not None:
+            await self._media_config_consumer.stop()
         await self._consumer.stop()
         await self._manager.disconnect()
         logger.info("receiver service stopped")
