@@ -52,8 +52,50 @@ Media files flow through a separate HTTP path: see `doc/media_retrieval.md` for 
 
 ### AMQP Topology
 
-- **tg-if.events** (topic, durable): incoming event routing keys
-- **tg-if.responses** (direct, durable): outgoing.responses queue
+```mermaid
+graph TB
+    subgraph tg-if["tg-if (gateway)"]
+        RE[Rules Engine<br/>condition → target]
+        DISP[EventDispatcher]
+        PUB[Publisher]
+        CON[ResponseConsumer]
+        TC[TelegramClient]
+        EX_EVENTS[(tg-if.events<br/>Topic Exchange)]
+        EX_RESP[(tg-if.responses<br/>Direct Exchange)]
+        Q_RESP[Queue: outgoing.responses]
+    end
+
+    subgraph subs["Subscribers (your services)"]
+        S1[Subscriber A<br/>Alerts service]
+        S2[Subscriber B<br/>Media archiver]
+        S3[Subscriber C<br/>Full logger]
+        Q1[Queue<br/>binding: alerts]
+        Q2[Queue<br/>binding: media.#]
+        Q3[Queue<br/>binding: #]
+    end
+
+    TG[Telegram] -->|MTProto event| TC
+    TC --> RE
+    RE -->|matched rule → target key| DISP
+    DISP --> PUB
+    PUB -->|publish with routing key| EX_EVENTS
+    EX_EVENTS -->|route to matching bindings| Q1
+    EX_EVENTS --> Q2
+    EX_EVENTS --> Q3
+    Q1 --> S1
+    Q2 --> S2
+    Q3 --> S3
+    S1 -->|publish response| EX_RESP
+    S2 --> EX_RESP
+    S3 --> EX_RESP
+    EX_RESP -->|routing key: response| Q_RESP
+    Q_RESP --> CON --> TC
+```
+
+**Routing rules ≠ queues.** Rules produce routing keys (targets). Subscribers create their own queues and bind them with patterns to `tg-if.events` — tg-if never creates subscriber queues.
+
+- **tg-if.events** (topic, durable): incoming events published with rule target as routing key
+- **tg-if.responses** (direct, durable): outgoing.responses queue for subscriber replies
 
 ## Key Decisions
 

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 from app.admin_commands import AdminCommandHandler
 from domain.entities import ChatType, CommandEvent, RoutingContext
+from domain.rules import RoutingRule
 
 
 class MockClient:
@@ -25,6 +26,25 @@ class MockRule:
         self.target = target
 
 
+class MockDispatcher:
+    def __init__(self) -> None:
+        self.rules: dict[str, list[RoutingRule]] = {}
+
+    def add_rule(self, bot_name: str, rule: RoutingRule) -> None:
+        self.rules.setdefault(bot_name, []).append(rule)
+
+    def remove_rule(self, bot_name: str, idx: int) -> RoutingRule | None:
+        rules = self.rules.get(bot_name)
+        if rules is None or idx < 0 or idx >= len(rules):
+            return None
+        return rules.pop(idx)
+
+    def get_rules(self, bot_name: str | None = None) -> dict[str, list[RoutingRule]]:
+        if bot_name is not None:
+            return {bot_name: self.rules.get(bot_name, [])}
+        return dict(self.rules)
+
+
 def _make_handler(
     *,
     admin_client: Any = None,
@@ -34,12 +54,15 @@ def _make_handler(
     config: Any = None,
     metrics: Any = None,
     log_buffer: Any = None,
+    dispatcher: Any = None,
+    on_shutdown: Any = None,
 ) -> AdminCommandHandler:
     ac: Any = MockClient() if admin_client is None else admin_client
     mg: Any = MockManager() if manager is None else manager
     cfg: Any = _make_config() if config is None else config
     met: Any = _make_metrics() if metrics is None else metrics
     cls: Any = {} if clients is None else clients
+    disp: Any = MockDispatcher() if dispatcher is None else dispatcher
     return AdminCommandHandler(
         admin_client=ac,
         user_id=user_id,
@@ -47,7 +70,9 @@ def _make_handler(
         manager=mg,
         config=cfg,
         metrics=met,
+        dispatcher=disp,
         log_buffer=log_buffer,
+        on_shutdown=on_shutdown,
     )
 
 
@@ -125,11 +150,12 @@ class TestAdminCommands:
         assert args is not None
         text = args[0][1]
         assert "Available commands" in text
-        assert "/help" in text
+        assert "/ping" in text
         assert "/status" in text
-        assert "/bots" in text
-        assert "/rules" in text
-        assert "/log" in text
+        assert "/target" in text
+        assert "/rule-add" in text
+        assert "/rule-remove" in text
+        assert "/shutdown" in text
 
     async def test_unknown_command(self) -> None:
         admin = MockClient()
@@ -148,7 +174,7 @@ class TestAdminCommands:
         args = admin.send_text.await_args
         assert args is not None
         text = args[0][1]
-        assert "Service Status" in text
+        assert "Service Control Panel" in text
         assert "broker" in text
         assert "aibot" in text
         assert "supportbot" in text
@@ -159,6 +185,8 @@ class TestAdminCommands:
         assert "consumed:" in text
         assert "sent:" in text
         assert "failed: 1" in text
+        assert "Active Targets" in text
+        assert "Config Rules" in text
 
     async def test_bots_lists_configured_bots(self) -> None:
         admin = MockClient()
@@ -275,3 +303,148 @@ class TestAdminCommands:
         )
         await handler.handle(event, _private_context())
         admin.send_text.assert_not_called()
+
+    async def test_ping_returns_pong(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("ping"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert args[0][1] == "pong"
+
+    async def test_target_unknown_target(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("target", ["nonexistent"]), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "No data for target" in args[0][1]
+
+    async def test_target_requires_arg(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("target"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Usage: /target" in args[0][1]
+
+    async def test_rule_add_missing_args(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("rule-add"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Usage" in args[0][1]
+        assert "/rule-add" in args[0][1]
+
+    async def test_rule_add_appends_rule(self) -> None:
+        admin = MockClient()
+        dispatcher = MockDispatcher()
+        handler = _make_handler(admin_client=admin, dispatcher=dispatcher)
+        await handler.handle(
+            _make_event("rule-add", ["--bot", "aibot", "--target", "test_topic"]),
+            _private_context(),
+        )
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Rule added to aibot" in args[0][1]
+        assert "test_topic" in args[0][1]
+        assert len(dispatcher.rules.get("aibot", [])) == 1
+        assert dispatcher.rules["aibot"][0].target == "test_topic"
+
+    async def test_rule_add_with_condition(self) -> None:
+        admin = MockClient()
+        dispatcher = MockDispatcher()
+        handler = _make_handler(admin_client=admin, dispatcher=dispatcher)
+        await handler.handle(
+            _make_event(
+                "rule-add",
+                [
+                    "--bot",
+                    "aibot",
+                    "--target",
+                    "test_topic",
+                    "--condition",
+                    "event_type=message",
+                ],
+            ),
+            _private_context(),
+        )
+        admin.send_text.assert_awaited_once()
+        rule = dispatcher.rules["aibot"][0]
+        assert rule.condition == {"event_type": "message"}
+        assert rule.target == "test_topic"
+
+    async def test_rule_remove_missing_args(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("rule-remove"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Usage" in args[0][1]
+
+    async def test_rule_remove_removes_rule(self) -> None:
+        admin = MockClient()
+        dispatcher = MockDispatcher()
+        dispatcher.add_rule("aibot", RoutingRule(condition={}, target="topic_a"))
+        dispatcher.add_rule("aibot", RoutingRule(condition={}, target="topic_b"))
+        handler = _make_handler(admin_client=admin, dispatcher=dispatcher)
+        await handler.handle(
+            _make_event("rule-remove", ["--bot", "aibot", "--index", "1"]),
+            _private_context(),
+        )
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Rule 1 removed from aibot" in args[0][1]
+        assert len(dispatcher.rules["aibot"]) == 1
+        assert dispatcher.rules["aibot"][0].target == "topic_b"
+
+    async def test_rule_remove_invalid_index(self) -> None:
+        admin = MockClient()
+        dispatcher = MockDispatcher()
+        dispatcher.add_rule("aibot", RoutingRule(condition={}, target="topic_a"))
+        handler = _make_handler(admin_client=admin, dispatcher=dispatcher)
+        await handler.handle(
+            _make_event("rule-remove", ["--bot", "aibot", "--index", "5"]),
+            _private_context(),
+        )
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "No rule at index" in args[0][1]
+
+    async def test_rule_remove_nonexistent_bot(self) -> None:
+        admin = MockClient()
+        dispatcher = MockDispatcher()
+        handler = _make_handler(admin_client=admin, dispatcher=dispatcher)
+        await handler.handle(
+            _make_event("rule-remove", ["--bot", "nonexistent", "--index", "1"]),
+            _private_context(),
+        )
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "No rule at index" in args[0][1]
+
+    async def test_shutdown_calls_callback(self) -> None:
+        admin = MockClient()
+        shutdown_called = False
+
+        async def fake_shutdown() -> None:
+            nonlocal shutdown_called
+            shutdown_called = True
+
+        handler = _make_handler(admin_client=admin, on_shutdown=fake_shutdown)
+        await handler.handle(_make_event("shutdown"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Shutting down" in args[0][1]
+        assert shutdown_called

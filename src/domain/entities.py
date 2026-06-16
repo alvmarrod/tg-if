@@ -33,6 +33,8 @@ class RoutingContext(BaseModel):
     media_type: Optional[str] = None  # photo, video, document, audio, etc.
     user_role: Optional[str] = None  # creator, administrator, member
     command: Optional[str] = None  # e.g., "/start", "/help"
+    is_reply: bool = False
+    is_forward: bool = False
 
     model_config = ConfigDict(use_enum_values=True)
 
@@ -62,6 +64,8 @@ class MessageEvent(TelegramEvent):
     caption: Optional[str] = None
     media_type: Optional[str] = None
     has_media: bool = False
+    is_reply: bool = False
+    is_forward: bool = False
     file_id: Optional[str] = Field(
         default=None, description="Telegram file_id (session-specific, can download)"
     )

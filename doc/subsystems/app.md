@@ -34,13 +34,15 @@
 
 ## AdminCommandHandler
 
-- handle(event, context) — parses DM commands, dispatches to 5 handlers
-- Commands: /help, /status, /bots, /rules --bot <name>, /log [n]
+- handle(event, context) — parses DM commands, dispatches to handlers
+- Commands: see `doc/monitor_cmds.md` for full reference
+- Runtime rule mutation via `/rule-add` and `/rule-remove` with snapshot persistence
 - Sends responses as new DMs via admin client
 
 ## ServiceMetrics
 
 - Per-bot counters: received, matched, published
+- Per-target counters: events per routing target with rolling hour window
 - Response counters: consumed, sent, failed
 - snapshot() returns dict
 

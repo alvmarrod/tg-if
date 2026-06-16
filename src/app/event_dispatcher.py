@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -49,6 +51,7 @@ class EventDispatcher:
             await self._publisher.publish(decision.target, envelope)
             if self._metrics:
                 self._metrics.event_published(event.bot_id)
+                self._metrics.target_event(event.bot_id, decision.target)
             prom.events_published.labels(bot=event.bot_id).inc()
             logger.info(
                 "event routed",
@@ -64,6 +67,20 @@ class EventDispatcher:
             )
 
         return decision
+
+    def add_rule(self, bot_name: str, rule: RoutingRule) -> None:
+        self._rules.setdefault(bot_name, []).append(rule)
+
+    def remove_rule(self, bot_name: str, idx: int) -> RoutingRule | None:
+        rules = self._rules.get(bot_name)
+        if rules is None or idx < 0 or idx >= len(rules):
+            return None
+        return rules.pop(idx)
+
+    def get_rules(self, bot_name: str | None = None) -> dict[str, list[RoutingRule]]:
+        if bot_name is not None:
+            return {bot_name: self._rules.get(bot_name, [])}
+        return dict(self._rules)
 
     def _build_envelope(
         self,

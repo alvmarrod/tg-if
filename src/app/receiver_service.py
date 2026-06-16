@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Any
 
@@ -71,6 +72,7 @@ class ReceiverService:
             )
             admin_client = TelegramClient(admin_bot_cfg)
             notifier = AdminNotifier(config.admin, client=admin_client)
+            shutdown_cb: Callable[[], Awaitable[None]] = self.stop
             cmd_handler = AdminCommandHandler(
                 admin_client=admin_client,
                 user_id=config.admin.user_id,
@@ -78,9 +80,11 @@ class ReceiverService:
                 manager=self._manager,
                 config=config,
                 metrics=self._metrics,
+                dispatcher=self._dispatcher,
                 log_buffer=self._log_buffer,
                 media_config=self._media_config,
                 storage=self._cache,
+                on_shutdown=shutdown_cb,
             )
             admin_client.set_event_callback(cmd_handler.handle)
         self._notifier = notifier
