@@ -58,6 +58,29 @@ def _match_condition(
             actual = context.media_type
         elif key == "user_role":
             actual = context.user_role
+        elif key == "user_id":
+            actual = event.user_id
+        elif key == "chat_id":
+            actual = event.chat_id
+        elif key == "text_contains":
+            text = getattr(event, "text", None)
+            if text is None or expected not in text:
+                return False
+            continue
+        elif key == "caption_contains":
+            caption = getattr(event, "caption", None)
+            if caption is None or expected not in caption:
+                return False
+            continue
+        elif key == "callback_data":
+            data = getattr(event, "callback_data", None)
+            if data is None or data != expected:
+                return False
+            continue
+        elif key == "is_reply":
+            actual = context.is_reply
+        elif key == "is_forward":
+            actual = context.is_forward
         else:
             continue
 

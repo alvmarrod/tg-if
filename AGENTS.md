@@ -25,6 +25,8 @@ The core distinction vs. the Bot HTTP API: Pyrofork (MTProto) bypasses Bot API l
 | Config files | `config/bots.json` | Populated |
 | Config files | `.env.example` | Populated |
 | Media retrieval design | `doc/media_retrieval.md` | Approved |
+| RabbitMQ setup | `doc/rabbitmq_setup.md` | Created |
+| Monitor commands | `doc/monitor_cmds.md` | Created |
 | Media retrieval roadmap | `.agent/media-retrieval-roadmap.md` | — |
 | Dockerfile | `Dockerfile` | Empty stub |
 | Makefile | `Makefile` | Empty stub |

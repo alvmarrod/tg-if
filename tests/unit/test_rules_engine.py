@@ -167,6 +167,131 @@ class TestMatchCondition:
         cond = {"unknown_field": "whatever"}
         assert _match_condition(cond, message_event_text, private_context) is True
 
+    # --- user_id ---
+
+    def test_user_id_match(self, message_event_text: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"user_id": 67890}
+        assert _match_condition(cond, message_event_text, ctx) is True
+
+    def test_user_id_no_match(self, message_event_text: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"user_id": 99999}
+        assert _match_condition(cond, message_event_text, ctx) is False
+
+    # --- chat_id ---
+
+    def test_chat_id_match(self, message_event_text: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"chat_id": 12345}
+        assert _match_condition(cond, message_event_text, ctx) is True
+
+    def test_chat_id_no_match(self, message_event_text: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"chat_id": 99999}
+        assert _match_condition(cond, message_event_text, ctx) is False
+
+    # --- text_contains ---
+
+    def test_text_contains_match(self, message_event_text: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"text_contains": "Hello"}
+        assert _match_condition(cond, message_event_text, ctx) is True
+
+    def test_text_contains_no_match(self, message_event_text: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"text_contains": "xyz"}
+        assert _match_condition(cond, message_event_text, ctx) is False
+
+    def test_text_contains_on_no_text(self, message_event_photo: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"text_contains": "anything"}
+        assert _match_condition(cond, message_event_photo, ctx) is False
+
+    # --- caption_contains ---
+
+    def test_caption_contains_match(self, message_event_photo: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"caption_contains": "A photo"}
+        assert _match_condition(cond, message_event_photo, ctx) is True
+
+    def test_caption_contains_no_match(self, message_event_photo: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"caption_contains": "video"}
+        assert _match_condition(cond, message_event_photo, ctx) is False
+
+    def test_caption_contains_on_no_caption(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"caption_contains": "anything"}
+        assert _match_condition(cond, message_event_text, ctx) is False
+
+    # --- callback_data ---
+
+    def test_callback_data_match(self, callback_event: CallbackQueryEvent) -> None:
+        cond = {"callback_data": "option_1"}
+        assert (
+            _match_condition(
+                cond, callback_event, RoutingContext(chat_type=ChatType.PRIVATE)
+            )
+            is True
+        )
+
+    def test_callback_data_no_match(self, callback_event: CallbackQueryEvent) -> None:
+        cond = {"callback_data": "wrong"}
+        assert (
+            _match_condition(
+                cond, callback_event, RoutingContext(chat_type=ChatType.PRIVATE)
+            )
+            is False
+        )
+
+    def test_callback_data_on_non_callback(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        cond = {"callback_data": "option_1"}
+        assert _match_condition(cond, message_event_text, ctx) is False
+
+    # --- is_reply ---
+
+    def test_is_reply_match(self, message_event_reply: MessageEvent) -> None:
+        cond = {"is_reply": True}
+        assert (
+            _match_condition(
+                cond,
+                message_event_reply,
+                RoutingContext(chat_type=ChatType.PRIVATE, is_reply=True),
+            )
+            is True
+        )
+
+    def test_is_reply_no_match(
+        self, message_event_text: MessageEvent, private_context: RoutingContext
+    ) -> None:
+        cond = {"is_reply": True}
+        assert _match_condition(cond, message_event_text, private_context) is False
+
+    # --- is_forward ---
+
+    def test_is_forward_match(self, message_event_forward: MessageEvent) -> None:
+        cond = {"is_forward": True}
+        assert (
+            _match_condition(
+                cond,
+                message_event_forward,
+                RoutingContext(chat_type=ChatType.PRIVATE, is_forward=True),
+            )
+            is True
+        )
+
+    def test_is_forward_no_match(
+        self, message_event_text: MessageEvent, private_context: RoutingContext
+    ) -> None:
+        cond = {"is_forward": True}
+        assert _match_condition(cond, message_event_text, private_context) is False
+
 
 class TestResolveSubtypeEdgeCases:
     def test_unknown_event_type_returns_none(self) -> None:

@@ -91,6 +91,44 @@ def media_context() -> RoutingContext:
 
 
 @pytest.fixture
+def message_event_reply() -> MessageEvent:
+    return MessageEvent(
+        event_id=str(uuid4()),
+        timestamp=datetime.now(timezone.utc),
+        bot_id="aibot",
+        chat_id=12345,
+        user_id=67890,
+        message_id=103,
+        text="A reply",
+        is_reply=True,
+    )
+
+
+@pytest.fixture
+def message_event_forward() -> MessageEvent:
+    return MessageEvent(
+        event_id=str(uuid4()),
+        timestamp=datetime.now(timezone.utc),
+        bot_id="aibot",
+        chat_id=12345,
+        user_id=67890,
+        message_id=104,
+        text="A forwarded message",
+        is_forward=True,
+    )
+
+
+@pytest.fixture
+def context_reply() -> RoutingContext:
+    return RoutingContext(chat_type=ChatType.PRIVATE, is_reply=True)
+
+
+@pytest.fixture
+def context_forward() -> RoutingContext:
+    return RoutingContext(chat_type=ChatType.PRIVATE, is_forward=True)
+
+
+@pytest.fixture
 def sample_outgoing_response() -> dict[str, Any]:
     return {
         "response_id": "resp_1",

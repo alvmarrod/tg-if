@@ -11,15 +11,6 @@
 
 ---
 
-### B-004: Integration Tests
-
-**Status:** pending  
-**Area:** tests  
-**Subsystem:** [app](doc/subsystems/app.md) | [domain](doc/subsystems/domain.md) | [infra](doc/subsystems/infra.md)  
-**HLD:** [Architecture § Flow](doc/architecture_overview.md#flow)
-
----
-
 ### B-005: More Admin Commands
 
 **Status:** pending  

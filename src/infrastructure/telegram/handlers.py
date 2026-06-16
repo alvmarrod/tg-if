@@ -101,6 +101,8 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
     file_id, file_unique_id, media_raw = (
         _extract_media_info(message) if has_media else (None, None, {})
     )
+    is_reply = message.reply_to_message_id is not None
+    is_forward = message.forward_origin is not None
 
     return MessageEvent(
         event_id=str(message.id),
@@ -115,6 +117,8 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
         file_id=file_id,
         file_unique_id=file_unique_id,
         raw_payload=media_raw,
+        is_reply=is_reply,
+        is_forward=is_forward,
     )
 
 
@@ -153,6 +157,8 @@ def extract_routing_context(message: Message) -> RoutingContext:
         has_media=message.media is not None,
         media_type=str(message.media.value) if message.media else None,
         command=command,
+        is_reply=message.reply_to_message_id is not None,
+        is_forward=message.forward_origin is not None,
     )
 
 
