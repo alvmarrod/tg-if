@@ -1,5 +1,6 @@
 from app.admin_commands import AdminCommandHandler
-from app.admin_notifier import AdminNotifier, AdminSignalType
+from app.admin_notifier import AdminNotifier
+from domain.schemas import AdminSignalType
 from app.event_dispatcher import EventDispatcher
 from app.log_buffer import LogBuffer
 from app.metrics import BotEventMetrics, ResponseMetrics, ServiceMetrics

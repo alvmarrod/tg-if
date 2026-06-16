@@ -77,3 +77,53 @@ class TestServiceMetrics:
     def test_started_at_is_set(self) -> None:
         m = ServiceMetrics()
         assert m.started_at is not None
+
+    def test_target_event_creates_entry(self) -> None:
+        m = ServiceMetrics()
+        m.target_event("aibot", "topic_a")
+        assert "topic_a" in m.per_target
+        assert m.per_target["topic_a"].events == 1
+        assert "aibot" in m.per_target["topic_a"].bots
+
+    def test_target_event_multiple_bots(self) -> None:
+        m = ServiceMetrics()
+        m.target_event("aibot", "topic_a")
+        m.target_event("supportbot", "topic_a")
+        assert m.per_target["topic_a"].events == 2
+        assert m.per_target["topic_a"].bots == {"aibot", "supportbot"}
+
+    def test_target_event_multiple_targets(self) -> None:
+        m = ServiceMetrics()
+        m.target_event("aibot", "topic_a")
+        m.target_event("aibot", "topic_b")
+        assert m.per_target["topic_a"].events == 1
+        assert m.per_target["topic_b"].events == 1
+
+    def test_get_target_stats_returns_sorted(self) -> None:
+        m = ServiceMetrics()
+        m.target_event("aibot", "low")
+        m.target_event("aibot", "high")
+        m.target_event("aibot", "high")
+        stats = m.get_target_stats()
+        assert len(stats) == 2
+        assert stats[0].name == "high"
+        assert stats[0].events == 2
+        assert stats[1].name == "low"
+        assert stats[1].events == 1
+
+    def test_get_target_stats_empty(self) -> None:
+        m = ServiceMetrics()
+        assert m.get_target_stats() == []
+
+    def test_get_target_existing(self) -> None:
+        m = ServiceMetrics()
+        m.target_event("aibot", "topic_a")
+        stat = m.get_target("topic_a")
+        assert stat is not None
+        assert stat.name == "topic_a"
+        assert stat.events == 1
+        assert stat.bots == ["aibot"]
+
+    def test_get_target_missing(self) -> None:
+        m = ServiceMetrics()
+        assert m.get_target("nonexistent") is None
