@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from app.admin_notifier import AdminNotifier, AdminSignalType, _format_signal
+from app.admin_notifier import AdminNotifier, _format_signal
+from domain.schemas import AdminSignalType
 
 
 class MockClient:

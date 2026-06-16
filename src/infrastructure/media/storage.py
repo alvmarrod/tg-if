@@ -1,21 +1,11 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
-
-@dataclass
-class FileInfo:
-    bot_id: str
-    file_unique_id: str
-    ext: str
-    size: int
-    accesses: int
-    last_access: datetime | None
-    stored_at: datetime
+from domain.schemas import FileInfo
 
 
 _EXT_MIME: dict[str, str] = {

@@ -3,8 +3,15 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock
 
-from app.admin_commands import AdminCommandHandler
-from domain.entities import ChatType, CommandEvent, RoutingContext
+from app.admin_commands import (
+    AdminCommandHandler,
+    _format_size,
+    _format_uptime,
+    _parse_kwargs,
+    _parse_scope,
+    _parse_size,
+)
+from domain.entities import ChatType, CommandEvent, MediaScope, RoutingContext
 from domain.rules import RoutingRule
 
 
@@ -448,3 +455,91 @@ class TestAdminCommands:
         assert args is not None
         assert "Shutting down" in args[0][1]
         assert shutdown_called
+
+
+class TestParseKwargs:
+    def test_no_args(self) -> None:
+        assert _parse_kwargs([]) == {}
+
+    def test_key_with_value(self) -> None:
+        assert _parse_kwargs(["--bot", "aibot"]) == {"bot": "aibot"}
+
+    def test_key_without_value(self) -> None:
+        assert _parse_kwargs(["--flag"]) == {"flag": ""}
+
+    def test_multiple_keys(self) -> None:
+        assert _parse_kwargs(["--bot", "aibot", "--target", "test"]) == {
+            "bot": "aibot",
+            "target": "test",
+        }
+
+    def test_mixed_positional_ignored(self) -> None:
+        assert _parse_kwargs(["positional", "--key", "val"]) == {"key": "val"}
+
+
+class TestParseScope:
+    def test_global(self) -> None:
+        assert _parse_scope("global") == (MediaScope.GLOBAL, None)
+
+    def test_chat(self) -> None:
+        assert _parse_scope("chat:-100123") == (MediaScope.CHAT, "-100123")
+
+    def test_user(self) -> None:
+        assert _parse_scope("user:42") == (MediaScope.USER, "42")
+
+    def test_invalid(self) -> None:
+        assert _parse_scope("invalid") == (None, None)
+
+
+class TestFormatSize:
+    def test_bytes(self) -> None:
+        assert _format_size(512) == "512 B"
+
+    def test_kilobytes(self) -> None:
+        assert _format_size(1536) == "1.5 KB"
+
+    def test_megabytes(self) -> None:
+        assert _format_size(2_621_440) == "2.5 MB"
+
+    def test_gigabytes(self) -> None:
+        assert _format_size(3_221_225_472) == "3.0 GB"
+
+    def test_zero(self) -> None:
+        assert _format_size(0) == "0 B"
+
+
+class TestParseSize:
+    def test_raw_bytes(self) -> None:
+        assert _parse_size("1024") == 1024
+
+    def test_kilobytes(self) -> None:
+        assert _parse_size("1.5 KB") == 1536
+
+    def test_megabytes(self) -> None:
+        assert _parse_size("2 MB") == 2_097_152
+
+    def test_gigabytes(self) -> None:
+        assert _parse_size("1 GB") == 1_073_741_824
+
+    def test_case_insensitive(self) -> None:
+        assert _parse_size(" 1.5 mb ") == 1_572_864
+
+    def test_invalid(self) -> None:
+        assert _parse_size("not a size") is None
+
+
+class TestFormatUptime:
+    def test_seconds_only(self) -> None:
+        assert _format_uptime(5) == "5s"
+
+    def test_minutes(self) -> None:
+        assert _format_uptime(125) == "2m 5s"
+
+    def test_hours(self) -> None:
+        assert _format_uptime(3661) == "1h 1m 1s"
+
+    def test_exact_hour(self) -> None:
+        assert _format_uptime(3600) == "1h 0s"
+
+    def test_zero(self) -> None:
+        assert _format_uptime(0) == "0s"

@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any
 
 import structlog
 
+from domain.schemas import AdminSignalType
 from infrastructure.config import AdminBotConfig, BotConfig
 from infrastructure.telegram.client import TelegramClient
 
 
 logger = structlog.get_logger()
-
-
-class AdminSignalType(str, Enum):
-    RESPONSE_FAILED = "response_failed"
-    COMPONENT_CONNECTED = "component_connected"
-    COMPONENT_DISCONNECTED = "component_disconnected"
-    CONFIG_WARNING = "config_warning"
 
 
 def _format_signal(signal_type: AdminSignalType, **kwargs: Any) -> str:
