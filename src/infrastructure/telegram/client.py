@@ -4,7 +4,8 @@ from typing import Any
 import pyrogram
 import structlog
 from pyrogram.enums import ParseMode
-from pyrogram.types import InputMediaPhoto, InputMediaVideo, Message
+from pyrogram.handlers import DisconnectHandler
+from pyrogram.types import BotCommand, InputMediaPhoto, InputMediaVideo, Message
 
 from domain.entities import RoutingContext, TelegramEvent
 from infrastructure.config import BotConfig
@@ -42,16 +43,18 @@ class TelegramClient:
         self._on_connect_cb = on_connect
         self._on_disconnect_cb = on_disconnect
         name, workdir = parse_session_path(config.session_file)
-        self._client = pyrogram.Client(
+        kwargs: dict[str, Any] = dict(
             name=name,
             api_id=config.api_id,
             api_hash=config.api_hash,
             workdir=workdir,
         )
+        if config.bot_token is not None:
+            kwargs["bot_token"] = config.bot_token
+        self._client = pyrogram.Client(**kwargs)
         self._client.on_message()(self._on_message)
         self._client.on_callback_query()(self._on_callback_query)
-        self._client.on_connect()(self._on_connect_handler)  # type: ignore[attr-defined]
-        self._client.on_disconnect()(self._on_disconnect_handler)
+        self._client.add_handler(DisconnectHandler(self._on_disconnect_handler))
 
     @property
     def bot_id(self) -> str:
@@ -60,7 +63,7 @@ class TelegramClient:
     async def start(self) -> None:
         try:
             await self._client.start()
-            logger.info("telegram client started", bot=self._bot_id)
+            await self._on_connect_handler()
         except Exception:
             logger.warning(
                 "telegram client failed to start", bot=self._bot_id, exc_info=True
@@ -77,6 +80,18 @@ class TelegramClient:
 
     def set_event_callback(self, callback: EventCallback) -> None:
         self._event_callback = callback
+
+    async def set_bot_commands(self, commands: list[tuple[str, str]]) -> None:
+        try:
+            bot_commands = [
+                BotCommand(command=cmd, description=desc) for cmd, desc in commands
+            ]
+            await self._client.set_bot_commands(bot_commands)
+            logger.info("bot commands registered", bot=self._bot_id)
+        except Exception:
+            logger.warning(
+                "bot commands registration failed", bot=self._bot_id, exc_info=True
+            )
 
     async def health(self) -> bool:
         return self._client.is_connected if self._client else False
@@ -207,7 +222,7 @@ class TelegramClient:
             kwargs["reply_to_message_id"] = reply_to_message_id
         return await self._client.send_media_group(chat_id=chat_id, **kwargs)
 
-    async def _on_connect_handler(self, client: pyrogram.Client) -> None:
+    async def _on_connect_handler(self) -> None:
         logger.info("telegram client connected", bot=self._bot_id)
         if self._on_connect_cb:
             await self._on_connect_cb()

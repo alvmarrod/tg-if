@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+import sys
 from functools import partial
 from typing import Any
 
@@ -48,6 +48,8 @@ class ReceiverService:
         self._health_site: Any = None
         self._health_task: asyncio.Task[None] | None = None
         self._last_health: dict[str, bool] = {}
+        self._started = False
+        self._running = False
 
         clients: dict[str, TelegramClient] = {}
         for bot_cfg in config.bots:
@@ -61,7 +63,7 @@ class ReceiverService:
         self._clients = clients
 
         self._cache = DiskStorage(config.media_cache_path)
-        self._media_config = MediaConfigManager()
+        self._media_config = MediaConfigManager(config.media_config_path)
         notifier: AdminNotifier | None = None
         cmd_handler: AdminCommandHandler | None = None
         if config.admin is not None:
@@ -70,10 +72,10 @@ class ReceiverService:
                 api_id=config.admin.api_id,
                 api_hash=config.admin.api_hash,
                 session_file=config.admin.session_file,
+                bot_token=config.admin.bot_token,
             )
             admin_client = TelegramClient(admin_bot_cfg)
             notifier = AdminNotifier(config.admin, client=admin_client)
-            shutdown_cb: Callable[[], Awaitable[None]] = self.stop
             cmd_handler = AdminCommandHandler(
                 admin_client=admin_client,
                 user_id=config.admin.user_id,
@@ -85,7 +87,9 @@ class ReceiverService:
                 log_buffer=self._log_buffer,
                 media_config=self._media_config,
                 storage=self._cache,
-                on_shutdown=shutdown_cb,
+                on_shutdown=self.shutdown,
+                on_start=self.start,
+                on_restart=self.restart,
             )
             admin_client.set_event_callback(cmd_handler.handle)
         self._notifier = notifier
@@ -191,14 +195,21 @@ class ReceiverService:
         await self._notifier.notify(signal, component=name)
 
     async def start(self) -> None:
+        if self._running:
+            logger.warning("receiver service already running")
+            return
+
         await self._manager.connect()
+
+        if not self._started:
+            if self._notifier:
+                await self._notifier.start()
+                self._health_task = asyncio.create_task(self._health_monitor())
+                if self._cmd_handler:
+                    await self._cmd_handler.register_commands()
 
         for client in self._clients.values():
             await client.start()
-
-        if self._notifier:
-            await self._notifier.start()
-            self._health_task = asyncio.create_task(self._health_monitor())
 
         try:
             await self._consumer.start()
@@ -224,15 +235,23 @@ class ReceiverService:
             storage=self._cache,
         )
 
+        self._started = True
+        self._running = True
+
         logger.info(
             "receiver service started",
             bots=list(self._clients.keys()),
             admin=bool(self._notifier),
         )
 
-    async def stop(self) -> None:
+    async def shutdown(self) -> None:
+        if not self._running:
+            logger.warning("receiver service not running, shutdown skipped")
+            return
+
         if self._health_site is not None:
             await self._health_site.stop()
+            self._health_site = None
 
         if self._health_task is not None:
             self._health_task.cancel()
@@ -241,11 +260,19 @@ class ReceiverService:
         for client in self._clients.values():
             await client.stop()
 
-        if self._notifier:
-            await self._notifier.stop()
-
         if self._media_config_consumer is not None:
             await self._media_config_consumer.stop()
         await self._consumer.stop()
         await self._manager.disconnect()
+        self._running = False
         logger.info("receiver service stopped")
+
+    async def stop(self) -> None:
+        await self.shutdown()
+        if self._notifier:
+            await self._notifier.stop()
+
+    async def restart(self) -> None:
+        await self.shutdown()
+        logger.info("receiver service restarting — exiting with code 0")
+        sys.exit(0)

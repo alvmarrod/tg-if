@@ -73,50 +73,79 @@ LOG_LEVEL=INFO
 HEALTH_CHECK_PORT=8080
 ```
 
-### Bot Configuration (`config/bots.yaml`)
+### Bot Configuration (`config/bots.json`)
 
-```yaml
-bots:
-  - name: aibot
-    api_id: 12345
-    api_hash: "your_api_hash_here"
-    session_file: ./sessions/aibot.session
-    routing_rules:
-      - condition:
-          event_type: command
-          command_starts_with: /admin
-        target: incoming.events.aibot.commands.admin
-      
-      - condition:
-          event_type: message
-          has_media: true
-          media_type: photo
-        target: incoming.events.aibot.messages.image
-      
-      - condition:
-          event_type: message
-          has_media: false
-        target: incoming.events.aibot.messages.text
-      
-      - condition:
-          event_type: callback_query
-        target: incoming.events.aibot.callbacks
-      
-      - condition: {}  # default fallback
-        target: incoming.events.aibot.unhandled
-
-  - name: supportbot
-    api_id: 67890
-    api_hash: "another_api_hash"
-    session_file: ./sessions/supportbot.session
-    routing_rules:
-      - condition:
-          event_type: command
-        target: incoming.events.supportbot.commands
-      
-      - condition:
-          event_type: message
-        target: incoming.events.supportbot.messages
+```json
+{
+  "bots": [
+    {
+      "name": "aibot",
+      "api_id": 12345,
+      "api_hash": "your_api_hash_here",
+      "session_file": "sessions/aibot.session",
+      "routing_rules": [
+        {
+          "condition": {
+            "event_type": "command",
+            "command_starts_with": "/admin"
+          },
+          "target": "incoming.events.aibot.commands.admin"
+        },
+        {
+          "condition": {
+            "event_type": "message",
+            "has_media": true,
+            "media_type": "photo"
+          },
+          "target": "incoming.events.aibot.messages.image"
+        },
+        {
+          "condition": {
+            "event_type": "message",
+            "has_media": false
+          },
+          "target": "incoming.events.aibot.messages.text"
+        },
+        {
+          "condition": {
+            "event_type": "callback_query"
+          },
+          "target": "incoming.events.aibot.callbacks"
+        },
+        {
+          "condition": {},
+          "target": "incoming.events.aibot.unhandled"
+        }
+      ]
+    },
+    {
+      "name": "supportbot",
+      "api_id": 67890,
+      "api_hash": "another_api_hash",
+      "session_file": "sessions/supportbot.session",
+      "routing_rules": [
+        {
+          "condition": {
+            "event_type": "command"
+          },
+          "target": "incoming.events.supportbot.commands"
+        },
+        {
+          "condition": {
+            "event_type": "message"
+          },
+          "target": "incoming.events.supportbot.messages"
+        }
+      ]
+    }
+  ],
+  "admin": {
+    "api_id": 99999,
+    "api_hash": "admin_bot_hash",
+    "session_file": "sessions/admin.session",
+    "user_id": 123456789
+  }
+}
 ```
 
 ## ▶️ Execution
@@ -126,15 +155,15 @@ bots:
 uv sync
 
 # Run service
-python src/main.py
+python main.py
 ```
 
-On first run, interactive login will be requested for each bot (phone number + code). Sessions are saved in `sessions/` for subsequent runs.
+On first run, bots configured with `bot_token` authenticate automatically (preferred). Bots without a token require interactive login (phone number + code). Sessions are saved in `sessions/` for subsequent runs.
 
-## 🧠 Broker Streams
+## 🧠 Broker Topology
 
-| Stream Pattern | Direction | Description |
-| -------------- | --------- | ----------- |
+| Pattern | Direction | Description |
+| ------- | --------- | ----------- |
 | `incoming.events.{bot}.commands.*` | Published | Command events (e.g., /start, /help) |
 | `incoming.events.{bot}.messages.*` | Published | Regular messages (text, media) |
 | `incoming.events.{bot}.callbacks.*` | Published | Inline button callbacks |
@@ -143,8 +172,8 @@ On first run, interactive login will be requested for each bot (phone number + c
 
 **Direction Legend:**
 
-- **Published**: tg-if publishes to this stream (subscribers consume)
-- **Consumed**: tg-if consumes from this stream (subscribers publish)
+- **Published**: tg-if publishes to this exchange (subscribers consume)
+- **Consumed**: tg-if consumes from this exchange (subscribers publish)
 
 ## 📊 Message Schemas
 
@@ -243,7 +272,7 @@ incoming.events.{bot_name}.{event_type}.{subtype}
 
 - **Python 3.14+**: Core language
 - **Pyrofork**: MTProto client for Telegram API
-- **RabbitMQ Streams**: Message broker with ordering guarantees
+- **RabbitMQ (AMQP)**: Message broker with topic routing
 - **Pydantic**: Schema validation
 - **Structlog**: Structured logging
 - **uv**: Fast Python package manager
@@ -257,6 +286,7 @@ tg-if/
 ├── LICENSE
 ├── Makefile
 ├── README.md
+├── main.py                   # Application entrypoint
 ├── version.txt
 ├── uv.lock
 ├── pyproject.toml
@@ -264,14 +294,20 @@ tg-if/
 ├── .env.example
 │
 ├── config/
-│   ├── bots.yaml              # Bot configurations and routing rules
-│   └── bots.example.yaml
+│   ├── bots.example.json     # Example bot config (commit-safe)
+│   └── bots.json             # Actual bot config (gitignored, contains secrets)
 │
 ├── sessions/                  # MTProto sessions (runtime, gitignored)
 │
+├── doc/                       # Design documentation
+│   ├── architecture_overview.md
+│   ├── media_retrieval.md
+│   ├── monitor_cmds.md
+│   ├── rabbitmq_setup.md
+│   └── subsystems/
+│
 ├── src/
 │   ├── __init__.py
-│   ├── main.py                # Application entrypoint
 │   │
 │   ├── app/                   # Application layer
 │   │   ├── __init__.py
@@ -281,7 +317,9 @@ tg-if/
 │   │   ├── metrics.py             # Producer-consumer metrics counters
 │   │   ├── receiver_service.py    # Orchestrates sessions and event loop
 │   │   ├── event_dispatcher.py    # Rules engine and routing logic
-│   │   └── response_consumer.py   # Consumes outgoing responses
+│   │   ├── response_consumer.py   # Consumes outgoing responses
+│   │   ├── media_config.py        # Media config rule manager
+│   │   └── media_downloader.py    # Eager media downloader
 │   │
 │   ├── domain/                # Domain models
 │   │   ├── __init__.py
@@ -292,16 +330,21 @@ tg-if/
 │   └── infrastructure/        # External integrations
 │       ├── __init__.py
 │       ├── config.py          # Configuration loader
+│       ├── health.py          # aiohttp health/Metrics/Media server
 │       ├── metrics_exporter.py  # Prometheus metric definitions
 │       ├── telegram/
 │       │   ├── __init__.py
 │       │   ├── client.py      # Pyrofork client wrapper
 │       │   └── handlers.py    # Telegram event handlers
-│       └── broker/
+│       ├── broker/
+│       │   ├── __init__.py
+│       │   ├── rabbitmq.py    # RabbitMQ connection manager
+│       │   ├── publisher.py   # Message publishing
+│       │   └── consumer.py    # Response consumer
+│       └── media/
 │           ├── __init__.py
-│           ├── rabbitmq.py    # RabbitMQ Streams client
-│           ├── publisher.py   # Message publishing
-│           └── consumer.py    # Response consumer
+│           ├── storage.py     # Media storage (DiskStorage)
+│           └── endpoint.py    # HTTP media proxy endpoint
 │
 └── tests/
     ├── __init__.py
@@ -313,11 +356,17 @@ tg-if/
     │   ├── test_event_dispatcher.py
     │   ├── test_metrics.py
     │   ├── test_response_consumer.py
-    │   └── test_rules_engine.py
+    │   ├── test_rules_engine.py
+    │   ├── test_domain_entities.py
+    │   ├── test_domain_schemas.py
+    │   ├── test_log_buffer.py
+    │   ├── test_media_config.py
+    │   ├── test_media_storage.py
+    │   └── test_telegram_handlers.py
     ├── integration/
     │   ├── __init__.py
-    │   ├── test_telegram_flow.py
-    │   └── test_broker_flow.py
+    │   ├── test_broker_flow.py
+    │   └── test_routing_flow.py
     └── fixtures/
         ├── __init__.py
         └── sample_events.json
@@ -336,12 +385,11 @@ Response:
 ```json
 {
   "status": "healthy",
-  "sessions": {
+  "broker": "connected",
+  "clients": {
     "aibot": "connected",
     "supportbot": "connected"
-  },
-  "broker": "connected",
-  "uptime_seconds": 3600
+  }
 }
 ```
 
@@ -411,29 +459,34 @@ DM the admin bot to execute commands:
 | Command | Description |
 |---------|-------------|
 | `/help` | Show available commands |
-| `/status` | Service status with connection states and producer-consumer metrics |
+| `/ping` | Liveness check |
+| `/status` | Service control panel with connection states and metrics |
+| `/target &lt;name&gt;` | Per-target detail (events, bots, last activity) |
 | `/bots` | List configured bots and rule counts |
-| `/rules --bot <name>` | Show routing rules for a specific bot (omit `--bot` for all) |
+| `/rules [--bot &lt;name&gt;]` | Show routing rules (omit `--bot` for all) |
+| `/rule-add --bot &lt;n&gt; --target &lt;key&gt; [--condition k=v ...]` | Append routing rule |
+| `/rule-remove --bot &lt;n&gt; --index &lt;i&gt;` | Remove routing rule by index |
 | `/log [count]` | Show recent log entries (default 20) |
+| `/shutdown` | Disconnect broker and stop receivers (process stays alive) |
+| `/start` | Reconnect broker and restart receivers (after `/shutdown`) |
+| `/restart` | Shutdown everything and exit with code 0 (container restarts) |
+| `/media-eager --scope &lt;s&gt; [--type &lt;t&gt;]` | Set eager download rule |
+| `/media-lazy --scope &lt;s&gt; [--type &lt;t&gt;]` | Set lazy download rule |
+| `/media-config` | List media config rules |
+| `/media-list [--sort &lt;col&gt;:&lt;dir&gt;,...]` | List cached media |
+| `/media-stats` | Media cache statistics |
+| `/media-prune --keep-first N \| --max-size N \| --older-than Nd` | Prune media cache |
+| `/media-purge [confirm]` | Delete all cached media |
 
-Example `/status` output:
+### Lifecycle Management
 
-```text
-📊 Service Status  |  uptime: 2h 15m
+The service offers three-way lifecycle control:
 
-Connections:
-  broker       ✅
-  aibot        ✅
-  supportbot   ✅
-  admin        ✅
+- **`/shutdown`**: Gracefully disconnects the broker, stops event bots, consumers, and health server. The admin bot stays running so you can issue `/start` or `/restart`. The process **does not exit**.
+- **`/start`**: Reconnects the broker and re-starts all receivers. Only valid after `/shutdown`.
+- **`/restart`**: Shuts down everything (same as `/shutdown`) then calls `sys.exit(0)`. In Docker, the container exits cleanly and is restarted by the orchestrator.
 
-Incoming events:
-  aibot       recv: 142 → match: 138 → publish: 138
-  supportbot  recv: 89  → match: 85  → publish: 85
-
-Outgoing responses:
-  consumed: 203 → sent: 200 → failed: 3
-```
+This allows stopping and restarting the service without losing the admin bot session or requiring a full container recycle.
 
 ### Metrics Funnel
 

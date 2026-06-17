@@ -20,6 +20,10 @@ class BotConfig(BaseModel):
     api_id: int
     api_hash: str
     session_file: str
+    bot_token: str | None = Field(
+        default=None,
+        description="Bot token from BotFather for non-interactive auth",
+    )
     routing_rules: list[RoutingRule] = Field(default_factory=list)
 
 
@@ -28,6 +32,10 @@ class AdminBotConfig(BaseModel):
     api_id: int
     api_hash: str
     session_file: str = "sessions/admin.session"
+    bot_token: str | None = Field(
+        default=None,
+        description="Bot token from BotFather for non-interactive auth",
+    )
     user_id: int = Field(
         ..., description="Telegram user ID that receives notifications"
     )
@@ -43,6 +51,10 @@ class AppConfig(BaseModel):
     media_cache_path: str = Field(
         default="/data/media",
         description="Filesystem path for the media disk cache",
+    )
+    media_config_path: str = Field(
+        default="/data/media/media_config.json",
+        description="Filesystem path for the media config persistence file",
     )
     broker: BrokerConfig = Field(default_factory=BrokerConfig)
     bots: list[BotConfig] = Field(default_factory=list)
@@ -90,6 +102,9 @@ class ConfigLoader:
             health_port=cls._env_int("HEALTH_CHECK_PORT", 8080),
             media_base_url=cls._env_str("MEDIA_BASE_URL", "http://localhost:8080"),
             media_cache_path=cls._env_str("MEDIA_CACHE_PATH", "/data/media"),
+            media_config_path=cls._env_str(
+                "MEDIA_CONFIG_PATH", "/data/media/media_config.json"
+            ),
             broker=broker,
             bots=bots,
             admin=admin_config,

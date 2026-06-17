@@ -4,6 +4,8 @@
 
 ### Added
 
+- Lifecycle management: `/shutdown` (disconnect broker, stop receivers, keep process alive), `/start` (reconnect and restart receivers), `/restart` (shutdown + exit with code 0 for container restart)
+- `on_start` and `on_restart` callbacks to `AdminCommandHandler`
 - MTProto gateway service with Pyrofork integration
 - RabbitMQ AMQP pub/sub topology (tg-if.events + tg-if.responses)
 - Rules engine with 10 condition fields (event type, chat type, command, media, user role)
@@ -24,3 +26,9 @@
 - Pre-commit markdownlint switched from file inclusion to `.venv` exclusion
 - Design docs moved from root into `doc/` directory
 - Client health monitoring upgraded from 60s polling to instant callbacks
+
+### Fixed
+
+- Bot command registration rejects hyphens; registered with underscores, handler accepts both
+- Consumer `_run()` suppressed noisy `ChannelClosed` tracebacks during shutdown
+- `ReceiverService.stop()` no longer triggers Pyrofork "Task cannot await on itself" crash
