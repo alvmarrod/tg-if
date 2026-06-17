@@ -70,7 +70,7 @@ RABBITMQ_PASSWORD=guest
 
 # Service Configuration
 LOG_LEVEL=INFO
-HEALTH_CHECK_PORT=8080
+API_SIDE_PORT=8080
 ```
 
 ### Bot Configuration (`config/bots.json`)
@@ -522,7 +522,7 @@ Structured JSON logs with context:
 # Build image
 docker build -t tg-if:latest .
 
-# Run container
+# Run container (config/bots.json must exist on the mounted volume)
 docker run -d \
   --name tg-if \
   -v $(pwd)/config:/app/config \

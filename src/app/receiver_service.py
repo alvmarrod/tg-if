@@ -228,7 +228,7 @@ class ReceiverService:
             logger.warning("media config consumer not started", exc_info=True)
 
         self._health_site = await create_health_server(
-            self._config.health_port,
+            self._config.api_side_port,
             broker=self._manager,
             clients=list(self._clients.values()),
             client_map=self._clients,
