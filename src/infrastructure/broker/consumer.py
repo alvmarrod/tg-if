@@ -54,16 +54,21 @@ class Consumer:
         self._task = asyncio.create_task(self._run(queue))
 
     async def _run(self, queue: Any) -> None:
-        async with queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                async with message.process():
-                    try:
-                        body: dict[str, Any] = json.loads(message.body.decode())
-                    except json.JSONDecodeError:
-                        logger.exception("invalid message body", queue=self._queue_name)
-                        continue
+        try:
+            async with queue.iterator() as queue_iter:
+                async for message in queue_iter:
+                    async with message.process():
+                        try:
+                            body: dict[str, Any] = json.loads(message.body.decode())
+                        except json.JSONDecodeError:
+                            logger.exception(
+                                "invalid message body", queue=self._queue_name
+                            )
+                            continue
 
-                    await self._call_with_retry(body)
+                        await self._call_with_retry(body)
+        except asyncio.CancelledError:
+            pass
 
     async def _call_with_retry(self, body: dict[str, Any]) -> None:
         last_exc: Exception | None = None

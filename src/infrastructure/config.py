@@ -20,6 +20,10 @@ class BotConfig(BaseModel):
     api_id: int
     api_hash: str
     session_file: str
+    bot_token: str | None = Field(
+        default=None,
+        description="Bot token from BotFather for non-interactive auth",
+    )
     routing_rules: list[RoutingRule] = Field(default_factory=list)
 
 
@@ -28,6 +32,10 @@ class AdminBotConfig(BaseModel):
     api_id: int
     api_hash: str
     session_file: str = "sessions/admin.session"
+    bot_token: str | None = Field(
+        default=None,
+        description="Bot token from BotFather for non-interactive auth",
+    )
     user_id: int = Field(
         ..., description="Telegram user ID that receives notifications"
     )
@@ -35,14 +43,18 @@ class AdminBotConfig(BaseModel):
 
 class AppConfig(BaseModel):
     log_level: str = Field(default="INFO")
-    health_port: int = Field(default=8080)
+    api_side_port: int = Field(default=8080)
     media_base_url: str = Field(
-        default="http://localhost:8080",
-        description="Base URL for the /files/ media retrieval endpoint",
+        default="http://tg-if:8080",
+        description="Base URL for the /files/ media retrieval endpoint (port auto-appended from api_side_port)",
     )
     media_cache_path: str = Field(
         default="/data/media",
         description="Filesystem path for the media disk cache",
+    )
+    media_config_path: str = Field(
+        default="/data/media/media_config.json",
+        description="Filesystem path for the media config persistence file",
     )
     broker: BrokerConfig = Field(default_factory=BrokerConfig)
     bots: list[BotConfig] = Field(default_factory=list)
@@ -85,11 +97,18 @@ class ConfigLoader:
             msg = f"Bot configuration file not found: {bots_file}"
             raise FileNotFoundError(msg)
 
+        api_side_port = cls._env_int("API_SIDE_PORT", 8080)
+        raw_base = cls._env_str("MEDIA_BASE_URL", "http://tg-if")
+        media_base_url = f"{raw_base}:{api_side_port}"
+
         return AppConfig(
             log_level=cls._env_str("LOG_LEVEL", "INFO"),
-            health_port=cls._env_int("HEALTH_CHECK_PORT", 8080),
-            media_base_url=cls._env_str("MEDIA_BASE_URL", "http://localhost:8080"),
+            api_side_port=api_side_port,
+            media_base_url=media_base_url,
             media_cache_path=cls._env_str("MEDIA_CACHE_PATH", "/data/media"),
+            media_config_path=cls._env_str(
+                "MEDIA_CONFIG_PATH", "/data/media/media_config.json"
+            ),
             broker=broker,
             bots=bots,
             admin=admin_config,

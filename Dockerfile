@@ -18,7 +18,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv .venv
 
 COPY src/ src/
-COPY config/ config/
+# config/ is not baked in — mount config/bots.json at /app/config
 COPY main.py .
 
 ENV PYTHONPATH=/app/src

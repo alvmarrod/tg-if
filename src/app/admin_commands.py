@@ -106,6 +106,8 @@ class AdminCommandHandler:
         media_config: MediaConfigManager | None = None,
         storage: MediaStorage | None = None,
         on_shutdown: Callable[[], Awaitable[None]] | None = None,
+        on_start: Callable[[], Awaitable[None]] | None = None,
+        on_restart: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._admin = admin_client
         self._user_id = user_id
@@ -118,6 +120,32 @@ class AdminCommandHandler:
         self._media_config = media_config
         self._storage = storage
         self._on_shutdown = on_shutdown
+        self._on_start = on_start
+        self._on_restart = on_restart
+
+    async def register_commands(self) -> None:
+        commands: list[tuple[str, str]] = [
+            ("help", "Show available commands"),
+            ("ping", "Liveness check"),
+            ("status", "Service control panel"),
+            ("target", "Show per-target stats"),
+            ("bots", "List configured bots"),
+            ("rules", "Show routing rules"),
+            ("rule_add", "Append a routing rule"),
+            ("rule_remove", "Remove a routing rule"),
+            ("log", "Recent log entries"),
+            ("media_eager", "Set eager download rule"),
+            ("media_lazy", "Set lazy download rule"),
+            ("media_config", "Show media config rules"),
+            ("media_list", "List cached media"),
+            ("media_stats", "Media cache stats"),
+            ("media_prune", "Prune media cache"),
+            ("media_purge", "Purge media cache"),
+            ("shutdown", "Disconnect broker and stop service"),
+            ("start", "Reconnect broker and restart service"),
+            ("restart", "Shutdown and exit for container restart"),
+        ]
+        await self._admin.set_bot_commands(commands)
 
     async def handle(self, event: TelegramEvent, context: RoutingContext) -> None:
         if event.chat_id != self._user_id:
@@ -140,27 +168,31 @@ class AdminCommandHandler:
             await self._cmd_bots(event.chat_id)
         elif cmd == "rules":
             await self._cmd_rules(event.chat_id, args)
-        elif cmd == "rule-add":
+        elif cmd in ("rule-add", "rule_add"):
             await self._cmd_rule_add(event.chat_id, args)
-        elif cmd == "rule-remove":
+        elif cmd in ("rule-remove", "rule_remove"):
             await self._cmd_rule_remove(event.chat_id, args)
         elif cmd == "log":
             await self._cmd_log(event.chat_id, args)
         elif cmd == "shutdown":
             await self._cmd_shutdown(event.chat_id)
-        elif cmd == "media-eager":
+        elif cmd == "start":
+            await self._cmd_start(event.chat_id)
+        elif cmd == "restart":
+            await self._cmd_restart(event.chat_id)
+        elif cmd in ("media-eager", "media_eager"):
             await self._cmd_media_eager(event.chat_id, args)
-        elif cmd == "media-lazy":
+        elif cmd in ("media-lazy", "media_lazy"):
             await self._cmd_media_lazy(event.chat_id, args)
-        elif cmd == "media-config":
+        elif cmd in ("media-config", "media_config"):
             await self._cmd_media_config(event.chat_id, args)
-        elif cmd == "media-list":
+        elif cmd in ("media-list", "media_list"):
             await self._cmd_media_list(event.chat_id, args)
-        elif cmd == "media-stats":
+        elif cmd in ("media-stats", "media_stats"):
             await self._cmd_media_stats(event.chat_id)
-        elif cmd == "media-prune":
+        elif cmd in ("media-prune", "media_prune"):
             await self._cmd_media_prune(event.chat_id, args)
-        elif cmd == "media-purge":
+        elif cmd in ("media-purge", "media_purge"):
             await self._cmd_media_purge(event.chat_id, args)
         else:
             await self._admin.send_text(
@@ -180,7 +212,9 @@ class AdminCommandHandler:
             "/rule-add --bot <n> --target <key> [--condition k=v ...] — Append rule\n"
             "/rule-remove --bot <n> --index <i> — Remove rule by index\n"
             "/log [count] — Recent logs (default 20)\n"
-            "/shutdown — Graceful service stop\n"
+            "/shutdown — Disconnect broker and stop receivers\n"
+            "/start — Reconnect broker and restart receivers\n"
+            "/restart — Shutdown and exit (container will restart)\n"
             "/media-eager --scope <s> [--type <t>] — Set eager download\n"
             "/media-lazy --scope <s> [--type <t>] — Set lazy download\n"
             "/media-config — List media config rules\n"
@@ -425,6 +459,16 @@ class AdminCommandHandler:
         await self._admin.send_text(chat_id, "\U0001f6d1 Shutting down\u2026")
         if self._on_shutdown:
             await self._on_shutdown()
+
+    async def _cmd_start(self, chat_id: int) -> None:
+        await self._admin.send_text(chat_id, "\U0001f504 Starting\u2026")
+        if self._on_start:
+            await self._on_start()
+
+    async def _cmd_restart(self, chat_id: int) -> None:
+        await self._admin.send_text(chat_id, "\U0001f504 Restarting\u2026")
+        if self._on_restart:
+            await self._on_restart()
 
     async def _write_snapshot(self) -> None:
         bots_dir = Path("config")

@@ -1251,6 +1251,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyrofork" },
     { name = "structlog" },
+    { name = "tgcrypto" },
 ]
 
 [package.optional-dependencies]
@@ -1279,8 +1280,15 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0" },
     { name = "structlog", specifier = ">=25.1.0" },
     { name = "testcontainers", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+    { name = "tgcrypto", specifier = ">=1.2.5" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "tgcrypto"
+version = "1.2.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/59/7cf5ced989e3139a791d5452d58cb8994de589576b80f9267ba76d794f6c/TgCrypto-1.2.5.tar.gz", hash = "sha256:9bc2cac6fb9a12ef5b08f3dd500174fe374d89b660cce981f57e3138559cb682", size = 37280, upload-time = "2022-11-11T19:55:11.436Z" }
 
 [[package]]
 name = "typing-extensions"

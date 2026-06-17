@@ -63,6 +63,8 @@ def _make_handler(
     log_buffer: Any = None,
     dispatcher: Any = None,
     on_shutdown: Any = None,
+    on_start: Any = None,
+    on_restart: Any = None,
 ) -> AdminCommandHandler:
     ac: Any = MockClient() if admin_client is None else admin_client
     mg: Any = MockManager() if manager is None else manager
@@ -80,6 +82,8 @@ def _make_handler(
         dispatcher=disp,
         log_buffer=log_buffer,
         on_shutdown=on_shutdown,
+        on_start=on_start,
+        on_restart=on_restart,
     )
 
 
@@ -163,6 +167,8 @@ class TestAdminCommands:
         assert "/rule-add" in text
         assert "/rule-remove" in text
         assert "/shutdown" in text
+        assert "/start" in text
+        assert "/restart" in text
 
     async def test_unknown_command(self) -> None:
         admin = MockClient()
@@ -455,6 +461,38 @@ class TestAdminCommands:
         assert args is not None
         assert "Shutting down" in args[0][1]
         assert shutdown_called
+
+    async def test_start_calls_callback(self) -> None:
+        admin = MockClient()
+        start_called = False
+
+        async def fake_start() -> None:
+            nonlocal start_called
+            start_called = True
+
+        handler = _make_handler(admin_client=admin, on_start=fake_start)
+        await handler.handle(_make_event("start"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Starting" in args[0][1]
+        assert start_called
+
+    async def test_restart_calls_callback(self) -> None:
+        admin = MockClient()
+        restart_called = False
+
+        async def fake_restart() -> None:
+            nonlocal restart_called
+            restart_called = True
+
+        handler = _make_handler(admin_client=admin, on_restart=fake_restart)
+        await handler.handle(_make_event("restart"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Restarting" in args[0][1]
+        assert restart_called
 
 
 class TestParseKwargs:
