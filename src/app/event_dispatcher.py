@@ -7,7 +7,7 @@ from typing import Any
 import structlog
 
 from app.metrics import ServiceMetrics
-from domain.entities import RoutingContext, TelegramEvent
+from domain.entities import CallbackQueryEvent, RoutingContext, TelegramEvent
 from infrastructure import metrics_exporter as prom
 from domain.rules import RoutingDecision, RoutingRule, RulesEngine, resolve_subtype
 from infrastructure.broker import Publisher
@@ -122,5 +122,11 @@ class EventDispatcher:
             envelope["media_status"] = getattr(event, "media_status")
         if media_url:
             envelope["media_url"] = media_url
+
+        if isinstance(event, CallbackQueryEvent):
+            envelope["callback_id"] = event.callback_id
+            envelope["callback_data"] = event.callback_data
+            if event.message_id is not None:
+                envelope["message_id"] = event.message_id
 
         return envelope
