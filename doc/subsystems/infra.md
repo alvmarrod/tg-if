@@ -12,7 +12,7 @@
 ## Telegram Client (`telegram/client.py`)
 
 - TelegramClient.start() / stop() / health()
-- 6 send methods: send_text, send_photo, send_video, send_document, send_audio, send_action
+- 8 send/edit methods: send_text, send_photo, send_video, send_document, send_audio, send_media_group, edit_message_text, answer_callback_query
 - event_callback: optional callable for incoming events
 - Handlers always registered, guarded internally
 - set_event_callback() for post-construction wiring

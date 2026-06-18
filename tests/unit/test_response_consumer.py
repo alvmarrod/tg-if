@@ -15,6 +15,8 @@ class MockClient:
         self.send_video = AsyncMock()
         self.send_audio = AsyncMock()
         self.send_media_group = AsyncMock()
+        self.edit_message_text = AsyncMock()
+        self.answer_callback_query = AsyncMock()
 
 
 @pytest.fixture
@@ -91,6 +93,49 @@ class TestResponseConsumer:
             chat_id=12345, media=media_items
         )
 
+    async def test_handle_edit_message_text_response(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+    ) -> None:
+        body = {
+            "response_id": "resp_edit_1",
+            "correlation_id": "evt_edit_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "edit_message_text",
+            "payload": {"message_id": 42, "text": "Updated!"},
+        }
+
+        await consumer.handle(body)
+
+        mock_clients["aibot"].edit_message_text.assert_awaited_once_with(
+            chat_id=12345, message_id=42, text="Updated!"
+        )
+
+    async def test_handle_answer_callback_query_response(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+    ) -> None:
+        body = {
+            "response_id": "resp_acq_1",
+            "correlation_id": "evt_acq_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "answer_callback_query",
+            "payload": {"callback_query_id": "cq_99", "text": "Done!"},
+        }
+
+        await consumer.handle(body)
+
+        # Must NOT pass chat_id — answer_callback_query uses callback_query_id
+        mock_clients["aibot"].answer_callback_query.assert_awaited_once_with(
+            callback_query_id="cq_99", text="Done!"
+        )
+
     async def test_handle_unknown_bot_logs_error(
         self,
         consumer: ResponseConsumer,
@@ -134,6 +179,8 @@ class TestResponseConsumer:
             "send_video",
             "send_audio",
             "send_media_group",
+            "edit_message_text",
+            "answer_callback_query",
         ):
             getattr(mock_clients["aibot"], method_name).assert_not_awaited()
 

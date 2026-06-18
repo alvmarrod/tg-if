@@ -34,7 +34,11 @@ class ResponseConsumer:
         await self._send(client, response)
 
     async def _send(self, client: TelegramClient, response: OutgoingResponse) -> None:
-        method_name = f"send_{response.response_type}"
+        rtype = response.response_type
+        if rtype.startswith(("edit_", "answer_")):
+            method_name = rtype
+        else:
+            method_name = f"send_{rtype}"
         method = getattr(client, method_name, None)
         if not method:
             logger.error(
@@ -45,7 +49,11 @@ class ResponseConsumer:
             return
 
         try:
-            await method(chat_id=response.chat_id, **response.payload)
+            kwargs = response.payload
+            if rtype == "answer_callback_query":
+                await method(**kwargs)
+            else:
+                await method(chat_id=response.chat_id, **kwargs)
             if self._metrics:
                 self._metrics.response_sent()
             prom.responses_sent.inc()

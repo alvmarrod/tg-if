@@ -14,7 +14,7 @@
 - Input: dict body from RabbitMQ Consumer
 - Validates as OutgoingResponse
 - Routes to correct TelegramClient via bot_id
-- Calls send_{response_type} method
+- Calls send_{type} method (or edit_/answer_ method directly)
 - Increments ServiceMetrics counters
 
 ## ReceiverService
