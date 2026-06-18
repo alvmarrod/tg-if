@@ -1,5 +1,5 @@
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 import pyrogram
 import structlog
@@ -199,6 +199,47 @@ class TelegramClient:
         result = await self._client.send_audio(chat_id=chat_id, **kwargs)
         assert result is not None
         return result
+
+    async def edit_message_text(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        parse_mode: str | None = None,
+        reply_markup: list[list[dict[str, str]]] | None = None,
+    ) -> Message:
+        kwargs: dict[str, Any] = {}
+        if parse_mode is not None:
+            kwargs["parse_mode"] = _parse_mode(parse_mode)
+        markup = build_reply_markup(reply_markup)
+        if markup is not None:
+            kwargs["reply_markup"] = markup
+        result = await self._client.edit_message_text(
+            chat_id=chat_id, message_id=message_id, text=text, **kwargs
+        )
+        assert result is not None
+        return result
+
+    async def answer_callback_query(
+        self,
+        callback_query_id: str,
+        text: str | None = None,
+        show_alert: bool = False,
+        url: str | None = None,
+        cache_time: int = 0,
+    ) -> bool:
+        kwargs: dict[str, Any] = {}
+        if text is not None:
+            kwargs["text"] = text
+        if url is not None:
+            kwargs["url"] = url
+        result = await self._client.answer_callback_query(
+            callback_query_id=callback_query_id,
+            show_alert=show_alert,
+            cache_time=cache_time,
+            **kwargs,
+        )
+        return cast(bool, result)
 
     async def send_media_group(
         self,

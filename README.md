@@ -57,96 +57,17 @@ Telegram MTProto gateway service that receives events via Pyrofork, routes them 
 
 ### Environment Variables
 
+Copy and edit the example file:
+
 ```bash
 cp .env.example .env
 ```
 
-```bash
-# RabbitMQ Configuration
-RABBITMQ_HOST=localhost
-RABBITMQ_PORT=5672
-RABBITMQ_USER=guest
-RABBITMQ_PASSWORD=guest
+See [`.env.example`](.env.example) for all available variables.
 
-# Service Configuration
-LOG_LEVEL=INFO
-API_SIDE_PORT=8080
-```
+### Bot Configuration
 
-### Bot Configuration (`config/bots.json`)
-
-```json
-{
-  "bots": [
-    {
-      "name": "aibot",
-      "api_id": 12345,
-      "api_hash": "your_api_hash_here",
-      "session_file": "sessions/aibot.session",
-      "routing_rules": [
-        {
-          "condition": {
-            "event_type": "command",
-            "command_starts_with": "/admin"
-          },
-          "target": "incoming.events.aibot.commands.admin"
-        },
-        {
-          "condition": {
-            "event_type": "message",
-            "has_media": true,
-            "media_type": "photo"
-          },
-          "target": "incoming.events.aibot.messages.image"
-        },
-        {
-          "condition": {
-            "event_type": "message",
-            "has_media": false
-          },
-          "target": "incoming.events.aibot.messages.text"
-        },
-        {
-          "condition": {
-            "event_type": "callback_query"
-          },
-          "target": "incoming.events.aibot.callbacks"
-        },
-        {
-          "condition": {},
-          "target": "incoming.events.aibot.unhandled"
-        }
-      ]
-    },
-    {
-      "name": "supportbot",
-      "api_id": 67890,
-      "api_hash": "another_api_hash",
-      "session_file": "sessions/supportbot.session",
-      "routing_rules": [
-        {
-          "condition": {
-            "event_type": "command"
-          },
-          "target": "incoming.events.supportbot.commands"
-        },
-        {
-          "condition": {
-            "event_type": "message"
-          },
-          "target": "incoming.events.supportbot.messages"
-        }
-      ]
-    }
-  ],
-  "admin": {
-    "api_id": 99999,
-    "api_hash": "admin_bot_hash",
-    "session_file": "sessions/admin.session",
-    "user_id": 123456789
-  }
-}
-```
+See [`config/bots.example.json`](config/bots.example.json) for a complete example with routing rules and admin bot setup. Copy it to `config/bots.json` and fill in your credentials.
 
 ## ▶️ Execution
 
@@ -241,6 +162,43 @@ Consumed from: `outgoing.responses`
     }
   }
 }
+```
+
+#### Supported Response Types
+
+`response_type` maps to a Pyrofork method. Payload keys become the method's kwargs.
+
+| `response_type` | Required payload keys | Optional payload keys | Notes |
+|----------------|----------------------|-----------------------|-------|
+| `text` | `text` | `parse_mode`, `reply_to_message_id`, `reply_markup` | |
+| `photo` | `photo` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
+| `video` | `video` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
+| `document` | `document` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
+| `audio` | `audio` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
+| `media_group` | `media` (list of `{type, media, caption?}`) | `reply_to_message_id` | |
+| `edit_message_text` | `message_id`, `text` | `parse_mode`, `reply_markup` | Edits an existing message |
+| `answer_callback_query` | `callback_query_id` | `text`, `show_alert`, `url`, `cache_time` | `chat_id` is **not forwarded** |
+
+#### Callback Query Flow
+
+A typical inline button interaction involves two responses:
+
+1. Subscriber receives a `CallbackQueryEvent` with `callback_id`, `callback_data`, `message_id`, `chat_id`
+2. Subscriber publishes `answer_callback_query` to show a toast notification
+3. Subscriber publishes `edit_message_text` to update the button message
+
+```json
+[
+  {
+    "response_type": "answer_callback_query",
+    "payload": { "callback_query_id": "cq_99", "text": "Processing...", "show_alert": false }
+  },
+  {
+    "response_type": "edit_message_text",
+    "chat_id": 12345,
+    "payload": { "message_id": 42, "text": "Done! ✅" }
+  }
+]
 ```
 
 ## 🔍 Routing Rules
@@ -347,29 +305,9 @@ tg-if/
 │           └── endpoint.py    # HTTP media proxy endpoint
 │
 └── tests/
-    ├── __init__.py
-    ├── unit/
-    │   ├── __init__.py
-    │   ├── test_admin_commands.py
-    │   ├── test_admin_notifier.py
-    │   ├── test_consumer_retry.py
-    │   ├── test_event_dispatcher.py
-    │   ├── test_metrics.py
-    │   ├── test_response_consumer.py
-    │   ├── test_rules_engine.py
-    │   ├── test_domain_entities.py
-    │   ├── test_domain_schemas.py
-    │   ├── test_log_buffer.py
-    │   ├── test_media_config.py
-    │   ├── test_media_storage.py
-    │   └── test_telegram_handlers.py
-    ├── integration/
-    │   ├── __init__.py
-    │   ├── test_broker_flow.py
-    │   └── test_routing_flow.py
-    └── fixtures/
-        ├── __init__.py
-        └── sample_events.json
+    ├── unit/                    # 13 unit test files
+    ├── integration/             # 6 integration tests (opt-in, requires Docker)
+    └── fixtures/                # Sample events for testing
 ```
 
 ## 🏥 Health Checks
