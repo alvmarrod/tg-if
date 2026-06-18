@@ -30,19 +30,14 @@ class RabbitMQManager:
                 type=ExchangeType.TOPIC,
                 durable=True,
             )
-            responses_exchange = await channel.declare_exchange(
+            await channel.declare_exchange(
                 "tg-if.responses",
                 type=ExchangeType.DIRECT,
                 durable=True,
             )
-            queue = await channel.declare_queue("outgoing.responses", durable=True)
-            await queue.bind(responses_exchange, routing_key="response")
-            media_config_queue = await channel.declare_queue(
-                "media-config", durable=True
-            )
-            await media_config_queue.bind(
-                responses_exchange, routing_key="media-config"
-            )
+            await channel.declare_queue("outgoing.responses", durable=True)
+            await channel.declare_queue("media-config", durable=True)
+            await channel.declare_queue("subscriber-commands", durable=True)
             await channel.close()
             logger.info(
                 "broker connected", host=self._config.host, vhost=self._config.vhost

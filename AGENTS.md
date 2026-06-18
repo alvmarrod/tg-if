@@ -10,26 +10,29 @@ The core distinction vs. the Bot HTTP API: Pyrofork (MTProto) bypasses Bot API l
 
 | Layer | File | Status |
 |-------|------|--------|
-| Domain entities | `src/domain/entities.py` | Implemented (Pydantic models — OutgoingResponse) |
-| Domain schemas | `src/domain/schemas.py` | Empty stub |
+| Domain entities | `src/domain/entities.py` | Implemented (Pydantic models — OutgoingResponse, BotCommandRegistration, SubscriberCommandEnvelope) |
+| Domain schemas | `src/domain/schemas.py` | Populated (FileInfo, AdminSignalType) |
 | Domain rules | `src/domain/rules.py` | Implemented (RulesEngine, RoutingRule) |
 | App event_dispatcher | `src/app/event_dispatcher.py` | Implemented |
 | App receiver_service | `src/app/receiver_service.py` | Implemented (orchestrator) |
-| App response_consumer | `src/app/response_consumer.py` | Implemented |
+| App response_consumer | `src/app/response_consumer.py` | Implemented (8 response types) |
+| App bot_command_registry | `src/app/bot_command_registry.py` | Implemented |
+| App subscriber_command_handler | `src/app/subscriber_command_handler.py` | Implemented |
 | Infra config | `src/infrastructure/config.py` | Implemented |
 | Infra health | `src/infrastructure/health.py` | Implemented (includes client status) |
-| Infra telegram/client.py | `src/infrastructure/telegram/client.py` | Implemented (6 send methods) |
+| Infra telegram/client.py | `src/infrastructure/telegram/client.py` | Implemented (8 send methods) |
 | Infra telegram/handlers.py | `src/infrastructure/telegram/handlers.py` | Implemented |
-| Infra broker/* | `src/infrastructure/broker/*` | Implemented (RabbitMQManager, Publisher, Consumer w/ retry) |
-| Tests | `tests/*` | Empty stubs |
-| Config files | `config/bots.json` | Populated |
+| Infra broker/* | `src/infrastructure/broker/*` | Implemented (RabbitMQManager, Publisher, Consumer w/ retry + routing_key) |
+| Tests | `tests/*` | 210 unit / 7 integration |
+| Config files | `config/bots.json` | Populated (gitignored) |
 | Config files | `.env.example` | Populated |
-| Media retrieval design | `doc/media_retrieval.md` | Approved |
-| RabbitMQ setup | `doc/rabbitmq_setup.md` | Created |
+| Subscriber interface | `doc/subscriber_interface.md` | Created |
+| RabbitMQ setup | `doc/rabbitmq_setup.md` | Updated (links to subscriber_interface.md) |
 | Monitor commands | `doc/monitor_cmds.md` | Created |
+| Media retrieval design | `doc/media_retrieval.md` | Approved |
 | Media retrieval roadmap | `.agent/media-retrieval-roadmap.md` | — |
-| Dockerfile | `Dockerfile` | Empty stub |
-| Makefile | `Makefile` | Empty stub |
+| Dockerfile | `Dockerfile` | Multi-stage build (339MB) |
+| Makefile | `Makefile` | Implemented |
 | Entrypoint | `main.py` | Implemented (async, ReceiverService) |
 
 ## Architecture Summary
@@ -57,7 +60,9 @@ Exchange: tg-if.events (topic, durable)
 
 Exchange: tg-if.responses (direct, durable)
   Queue: outgoing.responses (bound with key "response")
-  Response consumer reads from this queue.
+  Queue: media-config (bound with key "media-config")
+  Queue: subscriber-commands (bound with key "subscriber-commands")
+  All bindings handled by Consumer via routing_key parameter (not in rabbitmq.py).
 ```
 
 ## Conventions
@@ -87,6 +92,9 @@ Exchange: tg-if.responses (direct, durable)
 | Internal retry over NACK requeue | Transparent retry inside Consumer preserves ordering, avoids message pollution with headers |
 | OutgoingResponse uses raw dict payload | Avoids premature schema pinning per response type; payload maps directly to send_* kwargs |
 | Hybrid eager/lazy media retrieval (`doc/media_retrieval.md`) | Immediate event publication + write-through HTTP cache; config controls timing of first download only; avoids blocking on download |
+| Queue bindings delegated to Consumer via `routing_key` parameter | Single source of truth at wiring layer, not in rabbitmq.py |
+| Subscriber commands channel is for bot command registration only | Not for routing rules or admin-plane access |
+| Topology for subscribers documented in `doc/subscriber_interface.md` | Separate from internal subsystem docs |
 
 ## Implementation Roadmap
 

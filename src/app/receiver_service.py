@@ -9,6 +9,8 @@ import structlog
 
 from app.admin_commands import AdminCommandHandler
 from app.admin_notifier import AdminNotifier
+from app.bot_command_registry import BotCommandRegistry
+from app.subscriber_command_handler import SubscriberCommandHandler
 from domain.schemas import AdminSignalType
 from app.event_dispatcher import EventDispatcher
 from app.log_buffer import LogBuffer
@@ -108,8 +110,16 @@ class ReceiverService:
             "outgoing.responses",
             self._response_consumer.handle,
             on_failed=self._on_response_failed,
+            routing_key="response",
         )
         self._media_config_consumer: Consumer | None = None
+        self._bot_command_registry = BotCommandRegistry()
+        self._subscriber_handler = SubscriberCommandHandler(
+            self._bot_command_registry,
+            self._clients,
+            self._manager,
+        )
+        self._sub_cmd_consumer: Consumer | None = None
 
     async def _on_event(self, event: TelegramEvent, context: RoutingContext) -> None:
         self._metrics.event_received(event.bot_id)
@@ -221,11 +231,24 @@ class ReceiverService:
                 self._manager,
                 "media-config",
                 self._on_media_config_message,
+                routing_key="media-config",
             )
             await mc.start()
             self._media_config_consumer = mc
         except Exception:
             logger.warning("media config consumer not started", exc_info=True)
+
+        try:
+            sc = Consumer(
+                self._manager,
+                "subscriber-commands",
+                self._subscriber_handler.handle,
+                routing_key="subscriber-commands",
+            )
+            await sc.start()
+            self._sub_cmd_consumer = sc
+        except Exception:
+            logger.warning("subscriber commands consumer not started", exc_info=True)
 
         self._health_site = await create_health_server(
             self._config.api_side_port,
@@ -262,6 +285,8 @@ class ReceiverService:
 
         if self._media_config_consumer is not None:
             await self._media_config_consumer.stop()
+        if self._sub_cmd_consumer is not None:
+            await self._sub_cmd_consumer.stop()
         await self._consumer.stop()
         await self._manager.disconnect()
         self._running = False

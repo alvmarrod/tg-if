@@ -1,7 +1,7 @@
 """Domain entities for tg-if service."""
 
 from enum import Enum
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -155,4 +155,42 @@ class OutgoingResponse(BaseModel):
     )
     payload: dict[str, Any] = Field(
         default_factory=dict, description="kwargs forwarded to the send method"
+    )
+
+
+class BotCommandRegistration(BaseModel):
+    """A subscriber's bot command registration for a specific bot."""
+
+    subscriber_id: str = Field(..., description="Unique subscriber identifier")
+    commands: list[dict[str, str]] = Field(
+        ..., description="List of {command, description} dicts"
+    )
+
+
+class SubscriberCommandEnvelope(BaseModel):
+    """Message published by a subscriber to register/deregister bot commands."""
+
+    action: Literal["register", "deregister"]
+    bot_id: str
+    subscriber_id: str
+    reply_to: str | None = Field(
+        default=None,
+        description="Queue name to publish the response to",
+    )
+    commands: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="List of {command, description} dicts (required for register)",
+    )
+
+
+class SubscriberCommandResponse(BaseModel):
+    """Response published back to the subscriber."""
+
+    status: Literal["ok", "nok"]
+    registered: list[str] = Field(
+        default_factory=list, description="Commands that were registered"
+    )
+    conflicts: list[str] = Field(
+        default_factory=list,
+        description="Conflict details if status is nok",
     )

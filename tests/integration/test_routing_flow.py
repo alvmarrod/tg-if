@@ -148,7 +148,9 @@ class TestMediaConfigConsumer:
             received.append(body)
             event.set()
 
-        consumer = Consumer(manager, "media-config", callback)
+        consumer = Consumer(
+            manager, "media-config", callback, routing_key="media-config"
+        )
         await consumer.start()
 
         conn = manager.connection
@@ -174,3 +176,50 @@ class TestMediaConfigConsumer:
         assert len(received) == 1
         assert received[0]["scope"] == "global"
         assert received[0]["action"] == "eager"
+
+
+class TestSubscriberCommands:
+    async def test_register_command_via_subscriber_commands_queue(
+        self,
+        manager: RabbitMQManager,
+    ) -> None:
+        received: list[dict[str, Any]] = []
+        event = asyncio.Event()
+
+        async def callback(body: dict[str, Any]) -> None:
+            received.append(body)
+            event.set()
+
+        consumer = Consumer(
+            manager,
+            "subscriber-commands",
+            callback,
+            routing_key="subscriber-commands",
+        )
+        await consumer.start()
+
+        conn = manager.connection
+        assert conn is not None and not conn.is_closed
+
+        payload = {
+            "action": "register",
+            "bot_id": "aibot",
+            "subscriber_id": "svc_1",
+            "commands": [{"command": "start", "description": "Start"}],
+        }
+
+        async with conn.channel() as channel:
+            exchange = await channel.get_exchange("tg-if.responses")
+            msg = aio_pika.Message(
+                body=json.dumps(payload).encode(),
+                delivery_mode=DeliveryMode.PERSISTENT,
+            )
+            await exchange.publish(msg, routing_key="subscriber-commands")
+
+        await asyncio.wait_for(event.wait(), timeout=10)
+        await consumer.stop()
+
+        assert len(received) == 1
+        assert received[0]["action"] == "register"
+        assert received[0]["bot_id"] == "aibot"
+        assert received[0]["commands"][0]["command"] == "start"
