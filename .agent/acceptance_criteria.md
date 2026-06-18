@@ -1,31 +1,41 @@
-# Acceptance Criteria — B-009
+# Acceptance Criteria — B-008
 
-## AC1: TelegramClient.edit_message_text exists and calls Pyrofork edit_message_text
+## AC1: BotCommandRegistry.register merges commands from multiple subscribers
 
-- **Pass:** Method takes `chat_id`, `message_id`, `text`, optional `parse_mode` and `reply_markup`; calls `self._client.edit_message_text()` with correct args; returns `Message`.
-- **Fail:** Method missing, signature wrong, or delegates to wrong Pyrofork call.
+**Pass:** Two subscribers register different commands for same bot → `get_commands` returns flat list with both.
+**Fail:** Commands not merged or lost.
 
-## AC2: TelegramClient.answer_callback_query exists and calls Pyrofork answer_callback_query
+## AC2: BotCommandRegistry detects conflicts
 
-- **Pass:** Method takes `callback_query_id`, optional `text`, `show_alert`, `url`, `cache_time`; calls `self._client.answer_callback_query()` with correct args; returns `bool`.
-- **Fail:** Method missing, signature wrong, or delegates to wrong Pyrofork call.
+**Pass:** Two subscribers register the same command name → `status: "nok"` with conflict details.
+**Fail:** Conflict allowed without error, or wrong subscriber blamed.
 
-## AC3: ResponseConsumer dispatches edit_message_text with chat_id + payload kwargs
+## AC3: BotCommandRegistry.deregister removes subscriber's commands
 
-- **Pass:** Submitting `response_type="edit_message_text"` with payload containing `message_id` and `text` calls `client.edit_message_text(chat_id=..., message_id=..., text=...)`.
-- **Fail:** Method not called, or called with wrong args.
+**Pass:** After deregister, `get_commands` no longer includes that subscriber's commands.
+**Fail:** Commands persist after deregister, or other subscriber's commands removed.
 
-## AC4: ResponseConsumer dispatches answer_callback_query without chat_id
+## AC4: SubscriberCommandHandler calls set_bot_commands on successful register
 
-- **Pass:** Submitting `response_type="answer_callback_query"` with payload containing `callback_query_id` calls `client.answer_callback_query(callback_query_id=...)`. The `chat_id` from `OutgoingResponse` is **not** passed.
-- **Fail:** `chat_id` is passed to `answer_callback_query`, or method is not called.
+**Pass:** Register message processed → `client.set_bot_commands` called with merged list.
+**Fail:** `set_bot_commands` not called, or called with wrong args.
 
-## AC5: Existing send methods continue to work unchanged
+## AC5: Conflict does not call set_bot_commands
 
-- **Pass:** All 6 existing `send_*` methods are dispatched with `chat_id` + payload kwargs as before.
-- **Fail:** Any existing method breaks or changes its arg contract.
+**Pass:** Register with conflict → handler responds NOK, `set_bot_commands` not called.
+**Fail:** `set_bot_commands` called despite conflict.
 
-## AC6: OutgoingResponse.response_type docstring mentions both new types
+## AC6: SubscriberCommandHandler publishes reply on reply_to queue
 
-- **Pass:** Docstring at `entities.py:154` includes `"edit_message_text"` and `"answer_callback_query"`.
-- **Fail:** Docstring unchanged.
+**Pass:** When `reply_to` is set, a `SubscriberCommandResponse` is published to that queue.
+**Fail:** No reply published, or reply has wrong format.
+
+## AC7: Consumer accepts optional routing_key parameter
+
+**Pass:** Consumer with `routing_key="test"` binds queue to exchange. Consumer without `routing_key` does not bind.
+**Fail:** Consumer always binds, or never binds, regardless of parameter.
+
+## AC8: Integration test: register command via subscriber-commands queue
+
+**Pass:** Publish register message → consumer receives it on subscriber-commands routing key.
+**Fail:** Message not delivered, or delivered to wrong routing key.

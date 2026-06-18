@@ -26,12 +26,14 @@ class Consumer:
         callback: Callable[[dict[str, Any]], Awaitable[Any]],
         max_retries: int = 3,
         on_failed: OnFailedCallback | None = None,
+        routing_key: str | None = None,
     ) -> None:
         self._manager = manager
         self._queue_name = queue_name
         self._callback = callback
         self._max_retries = max_retries
         self._on_failed = on_failed
+        self._routing_key = routing_key
         self._channel: AbstractChannel | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -44,12 +46,9 @@ class Consumer:
         assert self._channel is not None
         queue = await self._channel.declare_queue(self._queue_name, durable=True)
 
-        if self._queue_name == "outgoing.responses":
+        if self._routing_key:
             exchange = await self._channel.get_exchange("tg-if.responses")
-            await queue.bind(exchange, routing_key="response")
-        elif self._queue_name == "media-config":
-            exchange = await self._channel.get_exchange("tg-if.responses")
-            await queue.bind(exchange, routing_key="media-config")
+            await queue.bind(exchange, routing_key=self._routing_key)
 
         self._task = asyncio.create_task(self._run(queue))
 

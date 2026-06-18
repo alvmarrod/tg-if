@@ -90,6 +90,8 @@ On first run, bots configured with `bot_token` authenticate automatically (prefe
 | `incoming.events.{bot}.callbacks.*` | Published | Inline button callbacks |
 | `incoming.events.{bot}.unhandled` | Published | Events not matching any rule |
 | `outgoing.responses` | Consumed | Responses to send to Telegram |
+| `media-config` | Consumed | Media download policy rules |
+| `subscriber-commands` | Consumed | Bot command registration |
 
 **Direction Legend:**
 
@@ -98,108 +100,12 @@ On first run, bots configured with `bot_token` authenticate automatically (prefe
 
 ## 📊 Message Schemas
 
-### Incoming Event Schema
+See [`doc/subscriber_interface.md`](doc/subscriber_interface.md) for the complete schema reference covering:
 
-Published to: `incoming.events.{bot_name}.{event_type}.{subtype}`
-
-```json
-{
-  "event_id": "550e8400-e29b-41d4-a716-446655440000",
-  "timestamp": 1706543210.123,
-  "partition_key": "chat:12345",
-  "bot_id": "aibot",
-  "bot_name": "aibot",
-  "event_type": "message",
-  "event_subtype": "text",
-  "chat_id": 12345,
-  "user_id": 67890,
-  "routing_context": {
-    "chat_type": "private",
-    "command": "/start",
-    "has_media": false,
-    "user_role": "member"
-  },
-  "payload": {
-    "message_id": 789,
-    "text": "/start",
-    "date": 1706543210,
-    "from": {
-      "id": 67890,
-      "first_name": "John",
-      "username": "john_doe"
-    },
-    "chat": {
-      "id": 12345,
-      "type": "private"
-    }
-  }
-}
-```
-
-### Outgoing Response Schema
-
-Consumed from: `outgoing.responses`
-
-```json
-{
-  "response_id": "660e8400-e29b-41d4-a716-446655440001",
-  "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
-  "timestamp": 1706543215.456,
-  "bot_id": "aibot",
-  "chat_id": 12345,
-  "response_type": "text",
-  "payload": {
-    "text": "Hello! How can I help you?",
-    "reply_to_message_id": 789,
-    "parse_mode": "Markdown",
-    "reply_markup": {
-      "inline_keyboard": [
-        [
-          {"text": "Option 1", "callback_data": "opt1"},
-          {"text": "Option 2", "callback_data": "opt2"}
-        ]
-      ]
-    }
-  }
-}
-```
-
-#### Supported Response Types
-
-`response_type` maps to a Pyrofork method. Payload keys become the method's kwargs.
-
-| `response_type` | Required payload keys | Optional payload keys | Notes |
-|----------------|----------------------|-----------------------|-------|
-| `text` | `text` | `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `photo` | `photo` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `video` | `video` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `document` | `document` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `audio` | `audio` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `media_group` | `media` (list of `{type, media, caption?}`) | `reply_to_message_id` | |
-| `edit_message_text` | `message_id`, `text` | `parse_mode`, `reply_markup` | Edits an existing message |
-| `answer_callback_query` | `callback_query_id` | `text`, `show_alert`, `url`, `cache_time` | `chat_id` is **not forwarded** |
-
-#### Callback Query Flow
-
-A typical inline button interaction involves two responses:
-
-1. Subscriber receives a `CallbackQueryEvent` with `callback_id`, `callback_data`, `message_id`, `chat_id`
-2. Subscriber publishes `answer_callback_query` to show a toast notification
-3. Subscriber publishes `edit_message_text` to update the button message
-
-```json
-[
-  {
-    "response_type": "answer_callback_query",
-    "payload": { "callback_query_id": "cq_99", "text": "Processing...", "show_alert": false }
-  },
-  {
-    "response_type": "edit_message_text",
-    "chat_id": 12345,
-    "payload": { "message_id": 42, "text": "Done! ✅" }
-  }
-]
-```
+- **Incoming events** — what subscribers consume from `tg-if.events`
+- **`outgoing.responses`** — all 8 supported `response_type` values with payload schemas
+- **`media-config`** — media download policy rules
+- **`subscriber-commands`** — bot command registration protocol
 
 ## 🔍 Routing Rules
 

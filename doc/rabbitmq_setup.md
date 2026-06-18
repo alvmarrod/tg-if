@@ -33,6 +33,7 @@ tg-if declares these on startup. The broker must allow application-level exchang
 |-------|---------|----------|-------------|
 | `outgoing.responses` | yes | `tg-if.responses` | `response` |
 | `media-config` | yes | `tg-if.responses` | `media-config` |
+| `subscriber-commands` | yes | `tg-if.responses` | `subscriber-commands` |
 
 ### Queues (Declared by Subscribers)
 
@@ -42,6 +43,8 @@ Subscribers create their own queues and bind them to `tg-if.events` with routing
 |-------|----------------|------------|
 | `my-subscriber.alerts` | `incoming.events.aibot.#` | Catches all events for `aibot` |
 | `my-subscriber.text` | `incoming.events.*.text.#` | Catches text messages from all bots |
+
+Message schemas for all three `tg-if.responses` queues: see [`subscriber_interface.md`](subscriber_interface.md).
 
 ## Event Flow
 

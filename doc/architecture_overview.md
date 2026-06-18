@@ -95,7 +95,7 @@ graph TB
 **Routing rules ≠ queues.** Rules produce routing keys (targets). Subscribers create their own queues and bind them with patterns to `tg-if.events` — tg-if never creates subscriber queues.
 
 - **tg-if.events** (topic, durable): incoming events published with rule target as routing key
-- **tg-if.responses** (direct, durable): outgoing.responses queue for subscriber replies
+- **tg-if.responses** (direct, durable): outgoing.responses (subscriber replies), media-config (media download policy), subscriber-commands (bot command registration)
 
 ## Key Decisions
 

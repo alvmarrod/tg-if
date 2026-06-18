@@ -67,3 +67,17 @@ Full design: `doc/media_retrieval.md`
 - Downloads media via Pyrofork `download_media(file_id, in_memory=True)`
 - Writes to disk cache keyed by `file_unique_id`
 - Runs concurrently with event publication (non-blocking)
+
+### BotCommandRegistry
+
+- In-memory dict `{bot_id: {subscriber_id: BotCommandRegistration}}`
+- `register(bot_id, subscriber_id, commands)` — merges, detects conflicts
+- `deregister(bot_id, subscriber_id)` — removes subscriber's commands
+- `get_commands(bot_id)` — returns merged flat list for `set_bot_commands`
+
+### SubscriberCommandHandler
+
+- AMQP message handler for `subscriber-commands` queue
+- Validates `SubscriberCommandEnvelope`, dispatches to `BotCommandRegistry`
+- On successful register/deregister, calls `TelegramClient.set_bot_commands()`
+- Publishes `SubscriberCommandResponse` to `reply_to` queue if provided
