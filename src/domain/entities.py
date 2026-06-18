@@ -156,6 +156,23 @@ class OutgoingResponse(BaseModel):
     payload: dict[str, Any] = Field(
         default_factory=dict, description="kwargs forwarded to the send method"
     )
+    reply_to: str | None = Field(
+        default=None,
+        description="Queue name for delivery result notification",
+    )
+
+
+class OutgoingResponseResult(BaseModel):
+    """Delivery result sent back to subscriber when reply_to is provided."""
+
+    response_id: str
+    correlation_id: str
+    bot_id: str
+    chat_id: int
+    status: Literal["delivered", "failed"]
+    error_type: str | None = None
+    error_message: str | None = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class BotCommandRegistration(BaseModel):

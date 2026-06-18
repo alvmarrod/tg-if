@@ -1,7 +1,8 @@
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import MagicMock, AsyncMock
 
 import pytest
+from pyrogram.errors import UserIsBlocked, FloodWait, MessageNotModified
 
 from app.response_consumer import ResponseConsumer
 
@@ -26,8 +27,22 @@ def mock_clients() -> dict[str, Any]:
 
 
 @pytest.fixture
-def consumer(mock_clients: dict[str, Any]) -> ResponseConsumer:
-    return ResponseConsumer(mock_clients)
+def mock_manager() -> MagicMock:
+    m = MagicMock()
+    conn = MagicMock()
+    conn.is_closed = False
+    channel = AsyncMock()
+    exchange = MagicMock()
+    exchange.publish = AsyncMock()
+    channel.default_exchange = exchange
+    conn.channel = AsyncMock(return_value=channel)
+    m.connection = conn
+    return m
+
+
+@pytest.fixture
+def consumer(mock_clients: dict[str, Any], mock_manager: MagicMock) -> ResponseConsumer:
+    return ResponseConsumer(mock_clients, mock_manager)
 
 
 class TestResponseConsumer:
@@ -196,3 +211,155 @@ class TestResponseConsumer:
 
         with pytest.raises(ConnectionError, match="telegram unavailable"):
             await consumer.handle(sample_outgoing_response)
+
+    async def test_terminal_error_with_reply_to_publishes_result(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        mock_clients["aibot"].send_text.side_effect = UserIsBlocked()
+        body = {
+            "response_id": "resp_term_1",
+            "correlation_id": "evt_term_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "text",
+            "payload": {"text": "hi"},
+            "reply_to": "amq.gen-reply",
+        }
+
+        await consumer.handle(body)  # Should NOT raise
+
+        publish = mock_manager.connection.channel.return_value.default_exchange.publish
+        publish.assert_awaited_once()
+        pos_args, kwargs = publish.await_args
+        assert b'"failed"' in pos_args[0].body
+        assert b'"USER_IS_BLOCKED"' in pos_args[0].body
+        assert kwargs["routing_key"] == "amq.gen-reply"
+
+    async def test_terminal_error_without_reply_to_skips_publish(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        mock_clients["aibot"].send_text.side_effect = UserIsBlocked()
+        body = {
+            "response_id": "resp_term_2",
+            "correlation_id": "evt_term_2",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "text",
+            "payload": {"text": "hi"},
+        }
+
+        await consumer.handle(body)  # Should NOT raise
+
+        publish = mock_manager.connection.channel.return_value.default_exchange.publish
+        publish.assert_not_awaited()
+
+    async def test_transient_error_raises_for_retry(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        sample_outgoing_response: dict[str, Any],
+    ) -> None:
+        mock_clients["aibot"].send_text.side_effect = FloodWait()
+
+        with pytest.raises(FloodWait):
+            await consumer.handle(sample_outgoing_response)
+
+    async def test_delivered_result_published_when_reply_to_set(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        body = {
+            "response_id": "resp_del_1",
+            "correlation_id": "evt_del_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "text",
+            "payload": {"text": "ok"},
+            "reply_to": "amq.gen-reply",
+        }
+
+        await consumer.handle(body)
+
+        publish = mock_manager.connection.channel.return_value.default_exchange.publish
+        publish.assert_awaited_once()
+        pos_args, kwargs = publish.await_args
+        assert b'"delivered"' in pos_args[0].body
+        assert kwargs["routing_key"] == "amq.gen-reply"
+
+    async def test_unknown_bot_with_reply_to_publishes_failure(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        body = {
+            "response_id": "resp_unk_1",
+            "correlation_id": "evt_unk_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "nonexistent",
+            "chat_id": 12345,
+            "response_type": "text",
+            "payload": {"text": "hi"},
+            "reply_to": "amq.gen-reply",
+        }
+
+        await consumer.handle(body)
+
+        publish = mock_manager.connection.channel.return_value.default_exchange.publish
+        publish.assert_awaited_once()
+        pos_args, kwargs = publish.await_args
+        assert b'"failed"' in pos_args[0].body
+        assert b'"UNKNOWN_BOT"' in pos_args[0].body
+        assert kwargs["routing_key"] == "amq.gen-reply"
+
+    async def test_handle_not_connected_skips_publish(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        mock_manager.connection = None
+        mock_clients["aibot"].send_text.side_effect = UserIsBlocked()
+        body = {
+            "response_id": "resp_nc_1",
+            "correlation_id": "evt_nc_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "text",
+            "payload": {"text": "hi"},
+            "reply_to": "amq.gen-reply",
+        }
+
+        await consumer.handle(body)  # Should NOT raise
+
+    async def test_message_not_modified_is_terminal(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+
+        mock_clients["aibot"].edit_message_text.side_effect = MessageNotModified()
+        body = {
+            "response_id": "resp_mnm_1",
+            "correlation_id": "evt_mnm_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "edit_message_text",
+            "payload": {"message_id": 42, "text": "same"},
+        }
+
+        await consumer.handle(body)  # Should NOT raise (terminal, not retried)

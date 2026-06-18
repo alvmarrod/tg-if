@@ -104,7 +104,9 @@ class ReceiverService:
             media_base_url=config.media_base_url,
         )
 
-        self._response_consumer = ResponseConsumer(self._clients, metrics=self._metrics)
+        self._response_consumer = ResponseConsumer(
+            self._clients, self._manager, metrics=self._metrics
+        )
         self._consumer = Consumer(
             self._manager,
             "outgoing.responses",

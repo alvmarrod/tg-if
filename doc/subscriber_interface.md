@@ -112,9 +112,14 @@ When `event_type` is `"callback_query"`, the envelope includes three additional 
   "bot_id": "aibot",
   "chat_id": 12345,
   "response_type": "text",
-  "payload": { ... }
+  "payload": { ... },
+  "reply_to": "amq.gen-my-reply-queue"
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reply_to` | string (optional) | Queue name for delivery result notification. See [Delivery Results](#delivery-results) below. |
 
 ### Supported Response Types
 
@@ -152,6 +157,36 @@ Inline button interactions involve two responses:
   }
 ]
 ```
+
+### Delivery Results
+
+If the request includes `reply_to`, tg-if publishes a delivery status to that queue (via the default exchange).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `response_id` | string | Echoes the original `response_id` |
+| `correlation_id` | string | Echoes the original `correlation_id` |
+| `bot_id` | string | Echoes the original `bot_id` |
+| `chat_id` | integer | Echoes the original `chat_id` |
+| `status` | string | `"delivered"` or `"failed"` |
+| `error_type` | string (optional) | Telegram error identifier, e.g. `"USER_IS_BLOCKED"`, `"CHAT_WRITE_FORBIDDEN"`, `"PEER_ID_INVALID"`; absent on success |
+| `error_message` | string (optional) | Full error description; absent on success |
+| `timestamp` | string (ISO-8601) | When the result was produced |
+
+```json
+{
+  "response_id": "660e8400-e29b-41d4-a716-446655440001",
+  "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
+  "bot_id": "aibot",
+  "chat_id": 12345,
+  "status": "failed",
+  "error_type": "USER_IS_BLOCKED",
+  "error_message": "Telegram says: [400 USER_IS_BLOCKED] ... The user blocked you",
+  "timestamp": "2025-01-01T00:00:01.234"
+}
+```
+
+Terminal delivery errors (`reply_to` or not) are silently dropped if the broker connection is unavailable — tg-if logs a warning but does not retry.
 
 ---
 
