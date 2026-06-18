@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from app.event_dispatcher import EventDispatcher
-from domain.entities import RoutingContext, TelegramEvent
+from domain.entities import CallbackQueryEvent, RoutingContext, TelegramEvent
 from domain.rules import RoutingRule
 from infrastructure.broker import Publisher
 
@@ -88,6 +88,9 @@ class TestEventDispatcher:
         assert envelope["user_id"] == 67890
         assert "routing_context" in envelope
         assert "payload" in envelope
+        assert "callback_id" not in envelope
+        assert "callback_data" not in envelope
+        assert "message_id" not in envelope
 
     async def test_dispatch_no_match_does_not_publish(
         self,
@@ -121,3 +124,54 @@ class TestEventDispatcher:
 
         assert decision.matched is False
         mock_publisher.publish.assert_not_awaited()
+
+    async def test_dispatch_callback_query_includes_callback_fields(
+        self,
+        dispatcher: EventDispatcher,
+        callback_event: CallbackQueryEvent,
+        private_context: RoutingContext,
+        mock_publisher: AsyncMock,
+    ) -> None:
+        dispatcher._rules["aibot"] = [
+            RoutingRule(
+                condition={"event_type": "callback_query"},
+                target="topic.callbacks",
+            ),
+        ]
+
+        decision = await dispatcher.dispatch(callback_event, private_context)
+
+        assert decision.matched is True
+        assert decision.target == "topic.callbacks"
+        mock_publisher.publish.assert_awaited_once()
+        args, _ = mock_publisher.publish.await_args
+        envelope = args[1]
+        assert envelope["event_type"] == "callback_query"
+        assert envelope["callback_id"] == "cb_1"
+        assert envelope["callback_data"] == "option_1"
+        assert envelope["message_id"] == 100
+        assert envelope["chat_id"] == 12345
+
+    async def test_dispatch_callback_query_no_message_id_omits_field(
+        self,
+        dispatcher: EventDispatcher,
+        callback_event: CallbackQueryEvent,
+        private_context: RoutingContext,
+        mock_publisher: AsyncMock,
+    ) -> None:
+        callback_event.message_id = None
+        dispatcher._rules["aibot"] = [
+            RoutingRule(
+                condition={"event_type": "callback_query"},
+                target="topic.callbacks",
+            ),
+        ]
+
+        decision = await dispatcher.dispatch(callback_event, private_context)
+
+        assert decision.matched is True
+        args, _ = mock_publisher.publish.await_args
+        envelope = args[1]
+        assert envelope["callback_id"] == "cb_1"
+        assert envelope["callback_data"] == "option_1"
+        assert "message_id" not in envelope

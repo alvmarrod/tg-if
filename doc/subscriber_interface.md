@@ -65,6 +65,35 @@ incoming.events.{bot_name}.{event_type}.{subtype}
 }
 ```
 
+### Callback Events
+
+When `event_type` is `"callback_query"`, the envelope includes three additional top-level fields for responding:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `callback_id` | string | Telegram callback query ID — used as `callback_query_id` in `answer_callback_query` |
+| `callback_data` | string | Data attached to the inline button |
+| `message_id` | integer | Message ID of the button message — used in `edit_message_text` |
+
+```json
+{
+  "event_id": "550e8400-e29b-41d4-a716-446655440001",
+  "timestamp": 1706543215.456,
+  "bot_id": "aibot",
+  "event_type": "callback_query",
+  "event_subtype": "text",
+  "chat_id": 12345,
+  "user_id": 67890,
+  "routing_context": {
+    "chat_type": "private"
+  },
+  "callback_id": "cb_99",
+  "callback_data": "option_1",
+  "message_id": 42,
+  "payload": {}
+}
+```
+
 ---
 
 ## 1. `outgoing.responses`
@@ -106,9 +135,9 @@ incoming.events.{bot_name}.{event_type}.{subtype}
 
 Inline button interactions involve two responses:
 
-1. Subscriber receives a `CallbackQueryEvent` with `callback_id`, `callback_data`, `message_id`, `chat_id`
-2. Subscriber publishes `answer_callback_query` to show a toast notification
-3. Subscriber publishes `edit_message_text` to update the button message
+1. Subscriber receives a `callback_query` event with `callback_id`, `callback_data`, `message_id`, `chat_id` as top-level fields
+2. Subscriber publishes `answer_callback_query` using `callback_id` as `callback_query_id` to show a toast notification
+3. Subscriber publishes `edit_message_text` using `message_id` and `chat_id` to update the button message
 
 ```json
 [
