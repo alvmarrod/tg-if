@@ -52,6 +52,9 @@ Telegram MTProto gateway service that receives events via Pyrofork, routes them 
 - **Producer-consumer metrics**: Per-bot event counters (received → matched → published) and response funnel (consumed → sent → failed)
 - **Prometheus `/metrics` endpoint**: Export all counters and gauges for external scraping
 - **Media retrieval**: Hybrid eager/lazy HTTP proxy for media files (see `doc/media_retrieval.md`)
+- **Media upload**: Sequential HTTP upload → `upl_<hash>` reference in OutgoingResponse with Telegram file_id caching (see `doc/subscriber_media_interface_esp.md`)
+- **Delete messages**: `delete_message` response type for removing messages via Pyrofork `delete_messages`
+- **Enriched event envelopes**: Subscribers receive `message_id`, `text`, `caption`, `command_args`, and `from_user` on every incoming event
 
 ## 🚀 Configuration
 
@@ -168,6 +171,9 @@ tg-if/
 │   ├── media_retrieval.md
 │   ├── monitor_cmds.md
 │   ├── rabbitmq_setup.md
+│   ├── setup_esp.md
+│   ├── subscriber_interface.md
+│   ├── subscriber_media_interface_esp.md    # Upload protocol spec (Español)
 │   └── subsystems/
 │
 ├── src/
@@ -196,6 +202,7 @@ tg-if/
 │       ├── config.py          # Configuration loader
 │       ├── health.py          # aiohttp health/Metrics/Media server
 │       ├── metrics_exporter.py  # Prometheus metric definitions
+│       ├── sqlite.py          # UploadRegistry (SQLite)
 │       ├── telegram/
 │       │   ├── __init__.py
 │       │   ├── client.py      # Pyrofork client wrapper
@@ -208,11 +215,12 @@ tg-if/
 │       └── media/
 │           ├── __init__.py
 │           ├── storage.py     # Media storage (DiskStorage)
-│           └── endpoint.py    # HTTP media proxy endpoint
+│           ├── endpoint.py    # HTTP media proxy endpoint
+│           └── upload_routes.py  # POST /upload/{bot_id} endpoint
 │
 └── tests/
-    ├── unit/                    # 13 unit test files
-    ├── integration/             # 6 integration tests (opt-in, requires Docker)
+    ├── unit/                    # 20 unit test files
+    ├── integration/             # 4 integration test files (opt-in, requires Docker)
     └── fixtures/                # Sample events for testing
 ```
 
@@ -321,6 +329,9 @@ DM the admin bot to execute commands:
 | `/media-stats` | Media cache statistics |
 | `/media-prune --keep-first N \| --max-size N \| --older-than Nd` | Prune media cache |
 | `/media-purge [confirm]` | Delete all cached media |
+| `/upload-list [--bot &lt;name&gt;]` | List upload records |
+| `/upload-prune --older-than Nd [--bot &lt;name&gt;] [--keep-first N] [--max-size M]` | Prune upload cache |
+| `/upload-purge [confirm] [--bot &lt;name&gt;]` | Delete all upload data |
 
 ### Lifecycle Management
 

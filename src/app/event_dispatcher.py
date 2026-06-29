@@ -110,6 +110,11 @@ class EventDispatcher:
             "event_subtype": resolve_subtype(event),
             "chat_id": event.chat_id,
             "user_id": event.user_id,
+            "message_id": getattr(event, "message_id", None),
+            "text": getattr(event, "text", None),
+            "caption": getattr(event, "caption", None),
+            "command_args": getattr(event, "command_args", None),
+            "from_user": event.from_user,
             "routing_context": context.model_dump(),
             "payload": event.raw_payload,
         }
@@ -126,7 +131,5 @@ class EventDispatcher:
         if isinstance(event, CallbackQueryEvent):
             envelope["callback_id"] = event.callback_id
             envelope["callback_data"] = event.callback_data
-            if event.message_id is not None:
-                envelope["message_id"] = event.message_id
 
         return envelope

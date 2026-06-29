@@ -79,8 +79,25 @@ def _detect_command(text: str | None) -> tuple[str | None, list[str]]:
     return raw, parts[1:]
 
 
+def _extract_from_user(
+    user: Any,
+) -> dict[str, Any] | None:
+    if user is None:
+        return None
+    return {
+        "id": user.id,
+        "is_bot": user.is_bot,
+        "first_name": user.first_name,
+        "last_name": getattr(user, "last_name", None),
+        "username": getattr(user, "username", None),
+        "language_code": getattr(user, "language_code", None),
+    }
+
+
 def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEvent:
     command, args = _detect_command(message.text)
+
+    from_user = _extract_from_user(message.from_user)
 
     if command is not None:
         return CommandEvent(
@@ -88,6 +105,7 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
             bot_id=bot_id,
             chat_id=message.chat.id,
             user_id=message.from_user.id if message.from_user else 0,
+            from_user=from_user,
             message_id=message.id,
             command=command,
             command_args=args,
@@ -109,6 +127,7 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
         bot_id=bot_id,
         chat_id=message.chat.id,
         user_id=message.from_user.id if message.from_user else 0,
+        from_user=from_user,
         message_id=message.id,
         text=message.text,
         caption=message.caption,
@@ -123,11 +142,14 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
 
 
 def callback_to_event(bot_id: str, query: CallbackQuery) -> CallbackQueryEvent:
+    from_user = _extract_from_user(query.from_user)
+
     return CallbackQueryEvent(
         event_id=str(query.id),
         bot_id=bot_id,
         chat_id=query.message.chat.id if query.message else 0,
         user_id=query.from_user.id,
+        from_user=from_user,
         callback_id=str(query.id),
         callback_data=query.data.decode()
         if isinstance(query.data, bytes)

@@ -263,6 +263,15 @@ class TelegramClient:
             kwargs["reply_to_message_id"] = reply_to_message_id
         return await self._client.send_media_group(chat_id=chat_id, **kwargs)
 
+    async def delete_message(
+        self,
+        chat_id: int,
+        message_ids: int | list[int],
+    ) -> int:
+        return await self._client.delete_messages(
+            chat_id=chat_id, message_ids=message_ids
+        )
+
     async def _on_connect_handler(self) -> None:
         logger.info("telegram client connected", bot=self._bot_id)
         if self._on_connect_cb:

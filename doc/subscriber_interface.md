@@ -31,49 +31,49 @@ incoming.events.{bot_name}.{event_type}.{subtype}
 
 ### Envelope
 
+All events share these top-level fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `event_id` | string | UUID v4 identifying this event |
+| `timestamp` | float | Unix timestamp of when the envelope was built |
+| `bot_id` | string | Bot that received the event |
+| `event_type` | string | `"message"`, `"command"`, `"callback_query"` |
+| `event_subtype` | string or null | `"text"`, `"photo"`, `"video"`, `"audio"`, `"document"`, or `null` |
+| `chat_id` | integer | Telegram chat ID |
+| `user_id` | integer | Telegram user ID of the sender |
+| `message_id` | integer or null | Telegram message ID (null for callback queries without a message) |
+| `text` | string or null | Full message text (commands and text messages); `null` for callback queries |
+| `caption` | string or null | Media caption; `null` for non-media messages |
+| `command_args` | array of strings or null | Arguments after the command; `null` for non-command events |
+| `from_user` | object or null | Sender info: `id`, `is_bot`, `first_name`, `last_name`, `username`, `language_code` |
+| `routing_context` | object | Context used for routing decisions (chat_type, command, has_media, media_type, user_role, is_reply, is_forward) |
+| `payload` | object | Raw Telegram data (file metadata for media; `{}` for text/commands) |
+
+Conditional fields:
+
+| Field | Condition |
+|-------|-----------|
+| `file_id` | Present when the event carries a media file |
+| `file_unique_id` | Present when the event carries a media file |
+| `media_status` | Present when the event carries a media file |
+| `media_url` | Present when the event carries a media file |
+| `callback_id` | Present when `event_type` is `"callback_query"` |
+| `callback_data` | Present when `event_type` is `"callback_query"` |
+
+Example:
+
 ```json
-{
-  "event_id": "550e8400-e29b-41d4-a716-446655440000",
-  "timestamp": 1706543210.123,
-  "partition_key": "chat:12345",
-  "bot_id": "aibot",
-  "bot_name": "aibot",
-  "event_type": "message",
-  "event_subtype": "text",
-  "chat_id": 12345,
-  "user_id": 67890,
-  "routing_context": {
-    "chat_type": "private",
-    "command": "/start",
-    "has_media": false,
-    "user_role": "member"
-  },
-  "payload": {
-    "message_id": 789,
-    "text": "/start",
-    "date": 1706543210,
-    "from": {
-      "id": 67890,
-      "first_name": "John",
-      "username": "john_doe"
-    },
-    "chat": {
-      "id": 12345,
-      "type": "private"
-    }
-  }
-}
-```
 
 ### Callback Events
 
-When `event_type` is `"callback_query"`, the envelope includes three additional top-level fields for responding:
+When `event_type` is `"callback_query"`, the envelope includes two additional top-level fields for responding:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `callback_id` | string | Telegram callback query ID — used as `callback_query_id` in `answer_callback_query` |
 | `callback_data` | string | Data attached to the inline button |
-| `message_id` | integer | Message ID of the button message — used in `edit_message_text` |
+| `message_id` | integer | Message ID of the button message — used in `edit_message_text` (also present in base envelope as `null` for non-message types) |
 
 ```json
 {
@@ -84,12 +84,23 @@ When `event_type` is `"callback_query"`, the envelope includes three additional 
   "event_subtype": "text",
   "chat_id": 12345,
   "user_id": 67890,
+  "message_id": 42,
+  "text": null,
+  "caption": null,
+  "command_args": null,
+  "from_user": {
+    "id": 67890,
+    "is_bot": false,
+    "first_name": "John",
+    "last_name": null,
+    "username": "john_doe",
+    "language_code": "en"
+  },
   "routing_context": {
     "chat_type": "private"
   },
   "callback_id": "cb_99",
   "callback_data": "option_1",
-  "message_id": 42,
   "payload": {}
 }
 ```
@@ -135,6 +146,7 @@ When `event_type` is `"callback_query"`, the envelope includes three additional 
 | `media_group` | `media` (list of `{type, media, caption?}`) | `reply_to_message_id` | |
 | `edit_message_text` | `message_id`, `text` | `parse_mode`, `reply_markup` | Edits an existing message |
 | `answer_callback_query` | `callback_query_id` | `text`, `show_alert`, `url`, `cache_time` | `chat_id` is **not forwarded** |
+| `delete_message` | `message_ids` (int or list[int]) | `revoke` | Calls `delete_messages` on Pyrofork. `chat_id` is forwarded automatically. |
 
 ### Callback Query Flow
 

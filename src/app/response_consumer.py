@@ -18,6 +18,7 @@ from pyrogram.errors import (
     ChatForbidden,
     ChatIdInvalid,
     ChatSendAudiosForbidden,
+    MessageDeleteForbidden,
     ChatSendDocsForbidden,
     ChatSendGifsForbidden,
     ChatSendInlineForbidden,
@@ -107,6 +108,8 @@ TRANSIENT_ERRORS = (
     ServiceUnavailable,
     Timeout,
 )
+
+TERMINAL_DELETE_ERRORS = (MessageDeleteForbidden,)
 
 logger = structlog.get_logger()
 
@@ -214,7 +217,7 @@ class ResponseConsumer:
 
     async def _send(self, client: TelegramClient, response: OutgoingResponse) -> None:
         rtype = response.response_type
-        if rtype.startswith(("edit_", "answer_")):
+        if rtype.startswith(("edit_", "answer_", "delete_")):
             method_name = rtype
         else:
             method_name = f"send_{rtype}"
@@ -282,6 +285,25 @@ class ResponseConsumer:
                 exc_info=True,
             )
             raise
+        except TERMINAL_DELETE_ERRORS as exc:
+            logger.warning(
+                "terminal delete error, not retrying",
+                bot_id=response.bot_id,
+                response_type=response.response_type,
+                error_type=exc.ID,
+            )
+            await self._publish_result(
+                response.reply_to,
+                OutgoingResponseResult(
+                    response_id=response.response_id,
+                    correlation_id=response.correlation_id,
+                    bot_id=response.bot_id,
+                    chat_id=response.chat_id,
+                    status="failed",
+                    error_type=exc.ID,
+                    error_message=str(exc),
+                ),
+            )
         except TERMINAL_ERRORS as exc:
             logger.warning(
                 "terminal send error, not retrying",

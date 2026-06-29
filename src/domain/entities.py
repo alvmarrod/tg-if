@@ -48,6 +48,10 @@ class TelegramEvent(BaseModel):
     event_type: EventType
     chat_id: int
     user_id: int
+    from_user: dict[str, Any] | None = Field(
+        default=None,
+        description="Sender info: id, first_name, last_name, username, is_bot, language_code",
+    )
     raw_payload: dict[str, Any] = Field(
         default_factory=dict, description="Raw Telegram update"
     )
@@ -151,7 +155,7 @@ class OutgoingResponse(BaseModel):
     chat_id: int
     response_type: str = Field(
         ...,
-        description="send method: text, photo, document, video, audio, media_group, edit_message_text, answer_callback_query",
+        description="send method: text, photo, document, video, audio, media_group, edit_message_text, answer_callback_query, delete_message",
     )
     payload: dict[str, Any] = Field(
         default_factory=dict, description="kwargs forwarded to the send method"
