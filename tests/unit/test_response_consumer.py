@@ -8,6 +8,7 @@ from pyrogram.errors import UserIsBlocked, FloodWait, MessageNotModified
 from app.response_consumer import ResponseConsumer
 from infrastructure.media.storage import MediaStorage
 from infrastructure.sqlite import UploadRegistry
+from pyrogram.errors import MessageDeleteForbidden
 
 
 class MockClient:
@@ -21,6 +22,7 @@ class MockClient:
         self.send_media_group = AsyncMock()
         self.edit_message_text = AsyncMock()
         self.answer_callback_query = AsyncMock()
+        self.delete_message = AsyncMock()
 
 
 @pytest.fixture
@@ -230,6 +232,7 @@ class TestResponseConsumer:
             "send_media_group",
             "edit_message_text",
             "answer_callback_query",
+            "delete_message",
         ):
             getattr(mock_clients["aibot"], method_name).assert_not_awaited()
 
@@ -630,3 +633,76 @@ class TestUploadResolution:
         assert kwargs["document"] == "AgAC..."
         assert kwargs["thumb"] == "file_id_thumb"
         assert kwargs["caption"] == "mixed"
+
+
+class TestDeleteMessage:
+    async def test_handle_delete_message_single(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        body = {
+            "response_id": "resp_del_1",
+            "correlation_id": "evt_del_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "delete_message",
+            "payload": {"message_ids": [42]},
+        }
+
+        await consumer.handle(body)
+
+        mock_clients["aibot"].delete_message.assert_awaited_once_with(
+            chat_id=12345, message_ids=[42]
+        )
+
+    async def test_handle_delete_message_multiple(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        body = {
+            "response_id": "resp_del_2",
+            "correlation_id": "evt_del_2",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "delete_message",
+            "payload": {"message_ids": [1, 2, 3]},
+        }
+
+        await consumer.handle(body)
+
+        mock_clients["aibot"].delete_message.assert_awaited_once_with(
+            chat_id=12345, message_ids=[1, 2, 3]
+        )
+
+    async def test_handle_delete_message_terminal_error(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        mock_clients["aibot"].delete_message.side_effect = MessageDeleteForbidden()
+        body = {
+            "response_id": "resp_del_3",
+            "correlation_id": "evt_del_3",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "delete_message",
+            "payload": {"message_ids": [42]},
+            "reply_to": "amq.gen-reply",
+        }
+
+        await consumer.handle(body)  # Should NOT raise
+
+        publish = mock_manager.connection.channel.return_value.default_exchange.publish
+        publish.assert_awaited_once()
+        pos_args, kwargs = publish.await_args
+        assert b'"failed"' in pos_args[0].body
+        assert b'"MESSAGE_DELETE_FORBIDDEN"' in pos_args[0].body
+        assert kwargs["routing_key"] == "amq.gen-reply"

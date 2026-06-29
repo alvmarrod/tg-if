@@ -88,9 +88,12 @@ class TestEventDispatcher:
         assert envelope["user_id"] == 67890
         assert "routing_context" in envelope
         assert "payload" in envelope
+        assert envelope["message_id"] == 100
+        assert envelope["text"] == "Hello world"
+        assert envelope["caption"] is None
+        assert envelope["from_user"] is None
         assert "callback_id" not in envelope
         assert "callback_data" not in envelope
-        assert "message_id" not in envelope
 
     async def test_dispatch_no_match_does_not_publish(
         self,
@@ -174,4 +177,64 @@ class TestEventDispatcher:
         envelope = args[1]
         assert envelope["callback_id"] == "cb_1"
         assert envelope["callback_data"] == "option_1"
-        assert "message_id" not in envelope
+        # message_id is in envelope for all event types; None for non-message types
+        assert envelope.get("message_id") is None
+
+    async def test_dispatch_envelope_includes_from_user(
+        self,
+        dispatcher: EventDispatcher,
+        private_context: RoutingContext,
+        mock_publisher: AsyncMock,
+    ) -> None:
+        from domain.entities import MessageEvent
+
+        event = MessageEvent(
+            event_id="evt_fu_1",
+            bot_id="aibot",
+            chat_id=12345,
+            user_id=67890,
+            message_id=200,
+            text="with user",
+            from_user={
+                "id": 67890,
+                "is_bot": False,
+                "first_name": "John",
+                "last_name": "Doe",
+                "username": "johndoe",
+                "language_code": "en",
+            },
+        )
+        dispatcher._rules["aibot"] = [
+            RoutingRule(condition={"event_type": "message"}, target="topic.messages"),
+        ]
+
+        await dispatcher.dispatch(event, private_context)
+
+        args, _ = mock_publisher.publish.await_args
+        envelope = args[1]
+        assert envelope["from_user"] == {
+            "id": 67890,
+            "is_bot": False,
+            "first_name": "John",
+            "last_name": "Doe",
+            "username": "johndoe",
+            "language_code": "en",
+        }
+
+    async def test_dispatch_command_envelope_includes_command_args(
+        self,
+        dispatcher: EventDispatcher,
+        command_event: Any,
+        private_context: RoutingContext,
+        mock_publisher: AsyncMock,
+    ) -> None:
+        dispatcher._rules["aibot"] = [
+            RoutingRule(condition={"event_type": "command"}, target="topic.commands"),
+        ]
+
+        await dispatcher.dispatch(command_event, private_context)
+
+        args, _ = mock_publisher.publish.await_args
+        envelope = args[1]
+        assert envelope["text"] == "/start"
+        assert envelope["command_args"] == []
