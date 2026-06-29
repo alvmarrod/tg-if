@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from domain.schemas import AdminSignalType, FileInfo
+from domain.schemas import AdminSignalType, FileInfo, UploadEntry
 
 
 class TestFileInfo:
@@ -49,3 +49,52 @@ class TestAdminSignalType:
     def test_is_str_enum(self) -> None:
         assert issubclass(AdminSignalType, str)
         assert isinstance(AdminSignalType.RESPONSE_FAILED, str)
+
+
+class TestUploadEntry:
+    def test_construct_with_all_fields(self) -> None:
+        entry = UploadEntry(
+            content_hash="a1b2c3d4",
+            url_hash="url_hash_1",
+            url="https://example.com/video.mp4",
+            file_id="AgAC...",
+            file_unique_id="QQAD...",
+            bot_id="supportbot",
+            ext="mp4",
+            size=45_000_000,
+            created_at=1000.0,
+            last_used_at=2000.0,
+            use_count=3,
+        )
+        assert entry.content_hash == "a1b2c3d4"
+        assert entry.url_hash == "url_hash_1"
+        assert entry.url == "https://example.com/video.mp4"
+        assert entry.file_id == "AgAC..."
+        assert entry.file_unique_id == "QQAD..."
+        assert entry.bot_id == "supportbot"
+        assert entry.ext == "mp4"
+        assert entry.size == 45_000_000
+        assert entry.created_at == 1000.0
+        assert entry.last_used_at == 2000.0
+        assert entry.use_count == 3
+
+    def test_defaults(self) -> None:
+        entry = UploadEntry(
+            content_hash="abc",
+            bot_id="b",
+            size=123,
+        )
+        assert entry.url_hash is None
+        assert entry.url is None
+        assert entry.file_id is None
+        assert entry.file_unique_id is None
+        assert entry.ext == "bin"
+        assert entry.created_at == 0.0
+        assert entry.last_used_at == 0.0
+        assert entry.use_count == 0
+
+    def test_minimal_construct(self) -> None:
+        entry = UploadEntry(content_hash="x", bot_id="y", size=1)
+        assert entry.content_hash == "x"
+        assert entry.bot_id == "y"
+        assert entry.size == 1

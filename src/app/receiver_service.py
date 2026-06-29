@@ -24,6 +24,7 @@ from infrastructure.config import AppConfig, BotConfig
 from infrastructure.health import create_health_server
 from infrastructure import metrics_exporter as prom
 from infrastructure.media.storage import DiskStorage
+from infrastructure.sqlite import UploadRegistry
 from infrastructure.telegram.client import TelegramClient
 
 
@@ -66,6 +67,8 @@ class ReceiverService:
 
         self._cache = DiskStorage(config.media_cache_path)
         self._media_config = MediaConfigManager(config.media_config_path)
+        self._upload_registry = UploadRegistry(config.upload_db_path)
+        self._upload_storage = DiskStorage(config.upload_storage_path)
         notifier: AdminNotifier | None = None
         cmd_handler: AdminCommandHandler | None = None
         if config.admin is not None:
@@ -89,6 +92,8 @@ class ReceiverService:
                 log_buffer=self._log_buffer,
                 media_config=self._media_config,
                 storage=self._cache,
+                upload_registry=self._upload_registry,
+                upload_storage=self._upload_storage,
                 on_shutdown=self.shutdown,
                 on_start=self.start,
                 on_restart=self.restart,
@@ -100,12 +105,17 @@ class ReceiverService:
         self._media_downloader = MediaDownloader(
             storage=self._cache,
             clients=self._clients,
+            config=self._media_config,
             publisher=self._publisher,
             media_base_url=config.media_base_url,
         )
 
         self._response_consumer = ResponseConsumer(
-            self._clients, self._manager, metrics=self._metrics
+            self._clients,
+            self._manager,
+            metrics=self._metrics,
+            registry=self._upload_registry,
+            upload_storage=self._upload_storage,
         )
         self._consumer = Consumer(
             self._manager,
@@ -223,6 +233,8 @@ class ReceiverService:
         for client in self._clients.values():
             await client.start()
 
+        self._upload_registry.connect()
+
         try:
             await self._consumer.start()
         except Exception:
@@ -258,6 +270,9 @@ class ReceiverService:
             clients=list(self._clients.values()),
             client_map=self._clients,
             storage=self._cache,
+            upload_registry=self._upload_registry,
+            upload_storage=self._upload_storage,
+            max_upload_size=self._config.max_upload_size,
         )
 
         self._started = True
@@ -290,6 +305,7 @@ class ReceiverService:
         if self._sub_cmd_consumer is not None:
             await self._sub_cmd_consumer.stop()
         await self._consumer.stop()
+        self._upload_registry.close()
         await self._manager.disconnect()
         self._running = False
         logger.info("receiver service stopped")

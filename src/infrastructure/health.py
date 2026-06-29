@@ -5,6 +5,13 @@ from aiohttp import web
 
 from infrastructure.media.endpoint import handle_file_get
 from infrastructure.media.storage import MediaStorage
+from infrastructure.media.upload_routes import (
+    MaxUploadSizeKey,
+    MediaStorageKey,
+    UploadRegistryKey,
+    handle_upload_post,
+)
+from infrastructure.sqlite import UploadRegistry
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -38,6 +45,9 @@ async def handle_metrics(request: web.Request) -> web.Response:
 async def create_health_server(
     port: int,
     storage: MediaStorage | None = None,
+    upload_registry: UploadRegistry | None = None,
+    upload_storage: MediaStorage | None = None,
+    max_upload_size: int = 2000 * 1024 * 1024,
     **kwargs: Any,
 ) -> web.TCPSite:
     app = web.Application()
@@ -45,9 +55,15 @@ async def create_health_server(
         app[key] = val
     if storage is not None:
         app["storage"] = storage
+    if upload_registry is not None:
+        app[UploadRegistryKey] = upload_registry
+    if upload_storage is not None:
+        app[MediaStorageKey] = upload_storage
+    app[MaxUploadSizeKey] = max_upload_size
     app.router.add_get("/health", handle_health)
     app.router.add_get("/metrics", handle_metrics)
     app.router.add_get("/files/{bot_id}/{file_unique_id}", handle_file_get)
+    app.router.add_post("/upload/{bot_id}", handle_upload_post)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)

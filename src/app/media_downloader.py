@@ -4,6 +4,7 @@ import asyncio
 
 import structlog
 
+from app.media_config import MediaConfigManager
 from domain.entities import MediaReadyEvent, MessageEvent, RoutingContext, TelegramEvent
 from infrastructure.broker import Publisher
 from infrastructure.media.storage import MediaStorage
@@ -31,11 +32,13 @@ class MediaDownloader:
         *,
         storage: MediaStorage,
         clients: dict[str, TelegramClient],
+        config: MediaConfigManager,
         publisher: Publisher | None = None,
         media_base_url: str = "http://localhost:8080",
     ) -> None:
         self._storage = storage
         self._clients = clients
+        self._config = config
         self._publisher = publisher
         self._media_base_url = media_base_url.rstrip("/")
 
@@ -46,6 +49,13 @@ class MediaDownloader:
             return
         if not context.media_type:
             return
+
+        if not self._config.evaluate(
+            chat_id=event.chat_id,
+            user_id=event.user_id,
+            media_type=context.media_type,
+        ):
+            return  # lazy mode — skip eager download
 
         # Check if already cached
         cached = await self._storage.retrieve(event.bot_id, event.file_unique_id)
