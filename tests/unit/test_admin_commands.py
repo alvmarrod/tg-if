@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from app.admin_commands import (
     AdminCommandHandler,
@@ -62,6 +62,8 @@ def _make_handler(
     metrics: Any = None,
     log_buffer: Any = None,
     dispatcher: Any = None,
+    upload_registry: Any = None,
+    upload_storage: Any = None,
     on_shutdown: Any = None,
     on_start: Any = None,
     on_restart: Any = None,
@@ -81,6 +83,8 @@ def _make_handler(
         metrics=met,
         dispatcher=disp,
         log_buffer=log_buffer,
+        upload_registry=upload_registry,
+        upload_storage=upload_storage,
         on_shutdown=on_shutdown,
         on_start=on_start,
         on_restart=on_restart,
@@ -169,6 +173,9 @@ class TestAdminCommands:
         assert "/shutdown" in text
         assert "/start" in text
         assert "/restart" in text
+        assert "/upload-list" in text
+        assert "/upload-prune" in text
+        assert "/upload-purge" in text
 
     async def test_unknown_command(self) -> None:
         admin = MockClient()
@@ -581,3 +588,267 @@ class TestFormatUptime:
 
     def test_zero(self) -> None:
         assert _format_uptime(0) == "0s"
+
+
+def _make_upload_entry(
+    content_hash: str = "abc123",
+    bot_id: str = "supportbot",
+    ext: str = "jpg",
+    size: int = 42_000,
+    file_id: str | None = "AgAC...",
+    use_count: int = 3,
+    last_used_at: float = 1_000_000.0,
+    created_at: float = 900_000.0,
+) -> object:
+    return type(
+        "MockUploadEntry",
+        (),
+        {
+            "content_hash": content_hash,
+            "url_hash": None,
+            "url": None,
+            "file_id": file_id,
+            "file_unique_id": "QQAD..." if file_id else None,
+            "bot_id": bot_id,
+            "ext": ext,
+            "size": size,
+            "created_at": created_at,
+            "last_used_at": last_used_at,
+            "use_count": use_count,
+        },
+    )()
+
+
+class TestUploadAdminCommands:
+    @property
+    def mock_registry(self) -> MagicMock:
+        m = MagicMock()
+        m.list_all = MagicMock(return_value=[])
+        m.delete = MagicMock(return_value=True)
+        m.purge_all = MagicMock(return_value=0)
+        return m
+
+    @property
+    def mock_upload_storage(self) -> MagicMock:
+        m = MagicMock()
+        m.delete = AsyncMock(return_value=True)
+        return m
+
+    async def test_upload_list_no_entries(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        handler = _make_handler(
+            admin_client=admin,
+            upload_registry=m,
+            upload_storage=self.mock_upload_storage,
+        )
+        await handler.handle(_make_event("upload-list"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "No upload records" in args[0][1]
+
+    async def test_upload_list_no_registry(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("upload-list"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Upload registry not available" in args[0][1]
+
+    async def test_upload_list_with_entries(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        m.list_all.return_value = [
+            _make_upload_entry(
+                content_hash="abc123", bot_id="aibot", ext="jpg", size=42000
+            ),
+            _make_upload_entry(
+                content_hash="def456", bot_id="aibot", ext="png", size=1024
+            ),
+        ]
+        handler = _make_handler(
+            admin_client=admin,
+            upload_registry=m,
+            upload_storage=self.mock_upload_storage,
+        )
+        await handler.handle(_make_event("upload-list"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        text = args[0][1]
+        assert "Upload records" in text
+        assert "abc123" in text
+        assert "def456" in text
+        assert "jpg" in text
+        assert "png" in text
+        assert "41.0 KB" in text or "42000" in text
+
+    async def test_upload_list_bot_filter(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        handler = _make_handler(
+            admin_client=admin,
+            upload_registry=m,
+            upload_storage=self.mock_upload_storage,
+        )
+        await handler.handle(
+            _make_event("upload-list", ["--bot", "aibot"]), _private_context()
+        )
+        m.list_all.assert_called_once_with(bot_id="aibot")
+
+    async def test_upload_prune_no_registry(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("upload-prune"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Upload service not available" in args[0][1]
+
+    async def test_upload_prune_no_criteria(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        us = self.mock_upload_storage
+        handler = _make_handler(
+            admin_client=admin, upload_registry=m, upload_storage=us
+        )
+        await handler.handle(_make_event("upload-prune"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Usage" in args[0][1]
+
+    async def test_upload_prune_older_than(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        us = self.mock_upload_storage
+        from datetime import datetime, timezone, timedelta
+
+        recent = datetime.now(timezone.utc) - timedelta(hours=1)
+        old = datetime.now(timezone.utc) - timedelta(days=10)
+        entries = [
+            _make_upload_entry(
+                content_hash="old", last_used_at=old.timestamp(), bot_id="b1"
+            ),
+            _make_upload_entry(
+                content_hash="new", last_used_at=recent.timestamp(), bot_id="b1"
+            ),
+        ]
+        m.list_all.return_value = entries
+        handler = _make_handler(
+            admin_client=admin, upload_registry=m, upload_storage=us
+        )
+        await handler.handle(
+            _make_event("upload-prune", ["--older-than", "5d"]), _private_context()
+        )
+        us.delete.assert_awaited_once_with("b1", "old")
+        m.delete.assert_called_once_with("old")
+
+    async def test_upload_prune_keep_first(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        us = self.mock_upload_storage
+        from datetime import datetime, timezone, timedelta
+
+        recent = datetime.now(timezone.utc) - timedelta(hours=1)
+        older = datetime.now(timezone.utc) - timedelta(days=10)
+        entries = [
+            _make_upload_entry(
+                content_hash="recent", last_used_at=recent.timestamp(), bot_id="b1"
+            ),
+            _make_upload_entry(
+                content_hash="old", last_used_at=older.timestamp(), bot_id="b1"
+            ),
+        ]
+        m.list_all.return_value = entries
+        handler = _make_handler(
+            admin_client=admin, upload_registry=m, upload_storage=us
+        )
+        await handler.handle(
+            _make_event("upload-prune", ["--keep-first", "1"]), _private_context()
+        )
+        us.delete.assert_awaited_once_with("b1", "old")
+        m.delete.assert_called_once_with("old")
+
+    async def test_upload_prune_bot_filter(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        us = self.mock_upload_storage
+        m.list_all.return_value = []
+        handler = _make_handler(
+            admin_client=admin, upload_registry=m, upload_storage=us
+        )
+        await handler.handle(
+            _make_event("upload-prune", ["--older-than", "1d", "--bot", "supportbot"]),
+            _private_context(),
+        )
+        m.list_all.assert_called_once_with(bot_id="supportbot")
+
+    async def test_upload_purge_no_registry(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("upload-purge"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Upload service not available" in args[0][1]
+
+    async def test_upload_purge_no_entries(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        us = self.mock_upload_storage
+        handler = _make_handler(
+            admin_client=admin, upload_registry=m, upload_storage=us
+        )
+        await handler.handle(
+            _make_event("upload-purge", ["confirm"]), _private_context()
+        )
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "No upload records to purge" in args[0][1]
+
+    async def test_upload_purge_no_confirm(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        us = self.mock_upload_storage
+        m.list_all.return_value = [
+            _make_upload_entry(content_hash="a", size=1000),
+            _make_upload_entry(content_hash="b", size=2000),
+        ]
+        handler = _make_handler(
+            admin_client=admin, upload_registry=m, upload_storage=us
+        )
+        await handler.handle(_make_event("upload-purge"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        text = args[0][1]
+        assert "2 upload records" in text
+        assert "2.9 KB" in text or "3000" in text
+        m.delete.assert_not_called()
+        us.delete.assert_not_called()
+
+    async def test_upload_purge_confirm(self) -> None:
+        admin = MockClient()
+        m = self.mock_registry
+        us = self.mock_upload_storage
+        entries = [
+            _make_upload_entry(content_hash="a", bot_id="b1", size=100),
+            _make_upload_entry(content_hash="b", bot_id="b2", size=200),
+        ]
+        m.list_all.return_value = entries
+        handler = _make_handler(
+            admin_client=admin, upload_registry=m, upload_storage=us
+        )
+        await handler.handle(
+            _make_event("upload-purge", ["confirm"]), _private_context()
+        )
+        assert us.delete.await_count == 2
+        assert m.delete.call_count == 2
+        us.delete.assert_any_await("b1", "a")
+        us.delete.assert_any_await("b2", "b")
+        m.delete.assert_any_call("a")
+        m.delete.assert_any_call("b")

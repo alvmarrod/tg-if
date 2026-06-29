@@ -190,6 +190,38 @@ Terminal delivery errors (`reply_to` or not) are silently dropped if the broker 
 
 ---
 
+## 1.1 Media File Upload
+
+For files larger than ~16 MB — or when the subscriber prefers not to inline binary data in AMQP messages — tg-if supports a two-step upload flow:
+
+1. **POST /upload/{bot_id}** — upload the file via HTTP multipart
+2. **OutgoingResponse** — reference the file via `upl_<SHA256>` in the payload
+
+tg-if resolves `upl_<hash>` at send time: if a Telegram `file_id` is already cached it uses it directly (fast path); otherwise it sends the bytes via Pyrofork and caches the returned `file_id` for reuse.
+
+See the full protocol spec (Español): [`doc/subscriber_media_interface_esp.md`](subscriber_media_interface_esp.md)
+
+### Supported key types
+
+Any file-typed payload key works with `upl_<hash>`:
+
+- `photo`, `video`, `document`, `audio`
+- `media` items inside `media_group`
+
+Non-`upl_` values pass through unchanged — mixed usage is supported (e.g. `document: "upl_abc", thumb: "file_id_xyz"`).
+
+### Admin commands
+
+Use these via the admin bot:
+
+| Command | Purpose |
+|---------|---------|
+| `/upload-list [--bot B]` | List upload records |
+| `/upload-prune --older-than Nd [--bot B] [--keep-first N] [--max-size M]` | Prune old records matching criteria |
+| `/upload-purge [--confirm] [--bot B]` | Purge all upload data |
+
+---
+
 ## 2. `media-config`
 
 **Purpose:** Subscribers set media download policies (eager vs lazy caching) per scope.

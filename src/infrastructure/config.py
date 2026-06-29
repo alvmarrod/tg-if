@@ -56,6 +56,18 @@ class AppConfig(BaseModel):
         default="/data/media/media_config.json",
         description="Filesystem path for the media config persistence file",
     )
+    upload_db_path: str = Field(
+        default="/data/uploads.db",
+        description="SQLite database path for upload registry",
+    )
+    upload_storage_path: str = Field(
+        default="/data/uploads",
+        description="Filesystem path for uploaded file storage",
+    )
+    max_upload_size: int = Field(
+        default=2000 * 1024 * 1024,
+        description="Maximum upload file size in bytes (default 2000 MB)",
+    )
     broker: BrokerConfig = Field(default_factory=BrokerConfig)
     bots: list[BotConfig] = Field(default_factory=list)
     admin: AdminBotConfig | None = None
@@ -109,6 +121,9 @@ class ConfigLoader:
             media_config_path=cls._env_str(
                 "MEDIA_CONFIG_PATH", "/data/media/media_config.json"
             ),
+            upload_db_path=cls._env_str("UPLOAD_DB_PATH", "/data/uploads.db"),
+            upload_storage_path=cls._env_str("UPLOAD_STORAGE_PATH", "/data/uploads"),
+            max_upload_size=cls._env_int("MAX_UPLOAD_SIZE", 2000 * 1024 * 1024),
             broker=broker,
             bots=bots,
             admin=admin_config,

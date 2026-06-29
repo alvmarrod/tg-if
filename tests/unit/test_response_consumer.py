@@ -1,10 +1,13 @@
+from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pyrogram.errors import UserIsBlocked, FloodWait, MessageNotModified
 
 from app.response_consumer import ResponseConsumer
+from infrastructure.media.storage import MediaStorage
+from infrastructure.sqlite import UploadRegistry
 
 
 class MockClient:
@@ -41,8 +44,39 @@ def mock_manager() -> MagicMock:
 
 
 @pytest.fixture
+def mock_registry() -> MagicMock:
+    m = MagicMock(spec=UploadRegistry)
+    m.get_by_hash = MagicMock()
+    m.touch_usage = MagicMock()
+    m.update_file_id = MagicMock()
+    return m
+
+
+@pytest.fixture
+def mock_storage() -> MagicMock:
+    m = MagicMock(spec=MediaStorage)
+    m.path_for = AsyncMock()
+    return m
+
+
+@pytest.fixture
 def consumer(mock_clients: dict[str, Any], mock_manager: MagicMock) -> ResponseConsumer:
     return ResponseConsumer(mock_clients, mock_manager)
+
+
+@pytest.fixture
+def consumer_with_upload(
+    mock_clients: dict[str, Any],
+    mock_manager: MagicMock,
+    mock_registry: MagicMock,
+    mock_storage: MagicMock,
+) -> ResponseConsumer:
+    return ResponseConsumer(
+        mock_clients,
+        mock_manager,
+        registry=mock_registry,
+        upload_storage=mock_storage,
+    )
 
 
 class TestResponseConsumer:
@@ -363,3 +397,236 @@ class TestResponseConsumer:
         }
 
         await consumer.handle(body)  # Should NOT raise (terminal, not retried)
+
+
+class TestUploadResolution:
+    async def test_resolve_upload_fast_path(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        mock_registry.get_by_hash.return_value = MagicMock(
+            content_hash="abc", file_id="AgAC...", bot_id="aibot"
+        )
+        resolved, ch = await consumer_with_upload._resolve_upload("aibot", "upl_abc")
+        assert resolved == "AgAC..."
+        assert ch == "abc"
+        mock_registry.touch_usage.assert_called_once_with("abc")
+        mock_storage.path_for.assert_not_called()
+
+    async def test_resolve_upload_slow_path(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        entry = MagicMock(content_hash="abc", file_id=None, bot_id="aibot")
+        entry.file_id = None
+        mock_registry.get_by_hash.return_value = entry
+        mock_storage.path_for.return_value = Path("/data/uploads/aibot/abc.bin")
+
+        resolved, ch = await consumer_with_upload._resolve_upload("aibot", "upl_abc")
+        assert isinstance(resolved, str)
+        assert resolved == str(Path("/data/uploads/aibot/abc.bin"))
+        assert ch == "abc"
+        mock_storage.path_for.assert_awaited_once_with("aibot", "abc")
+
+    async def test_resolve_upload_not_found(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        mock_registry.get_by_hash.return_value = None
+        mock_storage.path_for.return_value = None
+        with pytest.raises(ValueError, match="upload.*abc.*not found"):
+            await consumer_with_upload._resolve_upload("aibot", "upl_abc")
+
+    async def test_resolve_no_upload_configured(
+        self,
+        consumer: ResponseConsumer,
+    ) -> None:
+        with pytest.raises(ValueError, match="upload.*not found"):
+            await consumer._resolve_upload("aibot", "upl_abc")
+
+    async def test_resolve_non_upload_value_passthrough(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+    ) -> None:
+        resolved, ch = await consumer_with_upload._resolve_upload(
+            "aibot", "file_id_123"
+        )
+        assert resolved == "file_id_123"
+        assert ch is None
+        mock_registry.get_by_hash.assert_not_called()
+
+    async def test_resolve_empty_string_passthrough(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+    ) -> None:
+        resolved, ch = await consumer_with_upload._resolve_upload("aibot", "")
+        assert resolved == ""
+        assert ch is None
+        mock_registry.get_by_hash.assert_not_called()
+
+    async def test_resolve_just_prefix_no_entry(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+        mock_storage: MagicMock,
+    ) -> None:
+        mock_registry.get_by_hash.return_value = None
+        mock_storage.path_for.return_value = None
+        with pytest.raises(ValueError, match="upload.*not found"):
+            await consumer_with_upload._resolve_upload("aibot", "upl_")
+
+    async def test_update_after_send_single_file_id(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+    ) -> None:
+        mock_result = MagicMock()
+        photo_attr = MagicMock()
+        photo_attr.file_id = "AgAC..."
+        photo_attr.file_unique_id = "QQAD..."
+        mock_result.photo = photo_attr
+
+        await consumer_with_upload._update_after_send("photo", mock_result, ["abc123"])
+        mock_registry.update_file_id.assert_called_once_with(
+            "abc123", "AgAC...", "QQAD..."
+        )
+
+    async def test_update_after_send_no_registry(
+        self,
+        consumer: ResponseConsumer,
+    ) -> None:
+        mock_result = MagicMock()
+        await consumer._update_after_send("photo", mock_result, ["abc"])
+        assert True  # no error
+
+    async def test_update_after_send_empty_hashes(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+    ) -> None:
+        mock_result = MagicMock()
+        await consumer_with_upload._update_after_send("photo", mock_result, [])
+        mock_registry.update_file_id.assert_not_called()
+
+    async def test_update_after_send_media_group(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+    ) -> None:
+        mock_results = [
+            MagicMock(),
+            MagicMock(),
+        ]
+        photo_attr = MagicMock()
+        photo_attr.file_id = "AgAC1..."
+        photo_attr.file_unique_id = "QQAD1..."
+        mock_results[0].photo = photo_attr
+
+        mock_results[1].photo = None
+        video_attr = MagicMock()
+        video_attr.file_id = "AgAC2..."
+        video_attr.file_unique_id = "QQAD2..."
+        mock_results[1].video = video_attr
+
+        await consumer_with_upload._update_after_send(
+            "media_group", mock_results, ["hash1", "hash2"]
+        )
+        assert mock_registry.update_file_id.call_count == 2
+        mock_registry.update_file_id.assert_any_call("hash1", "AgAC1...", "QQAD1...")
+        mock_registry.update_file_id.assert_any_call("hash2", "AgAC2...", "QQAD2...")
+
+    async def test_handle_photo_with_upl_resolves_and_publishes(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_registry: MagicMock,
+        mock_manager: MagicMock,
+    ) -> None:
+        mock_registry.get_by_hash.return_value = MagicMock(
+            content_hash="abc", file_id="AgAC...", bot_id="aibot"
+        )
+        body = {
+            "response_id": "resp_upl_1",
+            "correlation_id": "evt_upl_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "photo",
+            "payload": {"photo": "upl_abc", "caption": "upl test"},
+        }
+
+        await consumer_with_upload.handle(body)
+
+        mock_registry.get_by_hash.assert_called_once_with("abc")
+        mock_clients["aibot"].send_photo.assert_awaited_once_with(
+            chat_id=12345, photo="AgAC...", caption="upl test"
+        )
+
+    async def test_handle_media_group_with_upl_resolves(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_registry: MagicMock,
+        mock_manager: MagicMock,
+    ) -> None:
+        mock_registry.get_by_hash.return_value = MagicMock(
+            content_hash="def", file_id="AgAC2...", bot_id="aibot"
+        )
+        body = {
+            "response_id": "resp_upl_mg",
+            "correlation_id": "evt_upl_mg",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "media_group",
+            "payload": {
+                "media": [
+                    {"type": "photo", "media": "upl_def", "caption": "upl mg"},
+                ]
+            },
+        }
+
+        await consumer_with_upload.handle(body)
+
+        mock_clients["aibot"].send_media_group.assert_awaited_once()
+        media_arg = mock_clients["aibot"].send_media_group.await_args.kwargs["media"]
+        assert media_arg[0]["media"] == "AgAC2..."
+
+    async def test_handle_with_upl_mixed_keeps_non_upl_intact(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_registry: MagicMock,
+        mock_manager: MagicMock,
+    ) -> None:
+        mock_registry.get_by_hash.return_value = MagicMock(
+            content_hash="abc", file_id="AgAC...", bot_id="aibot"
+        )
+        body = {
+            "response_id": "resp_upl_mix",
+            "correlation_id": "evt_upl_mix",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "document",
+            "payload": {
+                "document": "upl_abc",
+                "thumb": "file_id_thumb",
+                "caption": "mixed",
+            },
+        }
+
+        await consumer_with_upload.handle(body)
+
+        kwargs = mock_clients["aibot"].send_document.await_args.kwargs
+        assert kwargs["document"] == "AgAC..."
+        assert kwargs["thumb"] == "file_id_thumb"
+        assert kwargs["caption"] == "mixed"

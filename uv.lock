@@ -1265,6 +1265,11 @@ dev = [
     { name = "testcontainers" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aio-pika", specifier = ">=9.4.0" },
@@ -1283,6 +1288,9 @@ requires-dist = [
     { name = "tgcrypto", specifier = ">=1.2.5" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "mypy", specifier = ">=2.1.0" }]
 
 [[package]]
 name = "tgcrypto"

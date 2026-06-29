@@ -31,6 +31,11 @@ mypy_path = "src"
 strict = true
 explicit_package_bases = true
 
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
