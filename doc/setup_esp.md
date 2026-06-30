@@ -93,13 +93,25 @@ es `"incoming.events.supportbot.commands"`, esa es la routing key exacta.
   "event_subtype": "text",
   "chat_id": 12345,
   "user_id": 67890,
+  "message_id": 100,
+  "text": "/start",
+  "caption": null,
+  "command_args": [],
+  "from_user": {
+    "id": 67890,
+    "is_bot": false,
+    "first_name": "John",
+    "last_name": null,
+    "username": "john_doe",
+    "language_code": "en"
+  },
   "routing_context": {
     "chat_type": "private",
     "command": "start",
     "has_media": false,
-    "user_role": "member"
+    "user_role": null
   },
-  "payload": { ... }
+  "payload": {}
 }
 ```
 
