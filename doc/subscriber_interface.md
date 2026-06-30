@@ -47,6 +47,7 @@ All events share these top-level fields:
 | `caption` | string or null | Media caption; `null` for non-media messages |
 | `command_args` | array of strings or null | Arguments after the command; `null` for non-command events |
 | `from_user` | object or null | Sender info: `id`, `is_bot`, `first_name`, `last_name`, `username`, `language_code` |
+| `reply_to_message_id` | integer or null | The message ID this event is replying to; `null` if not a reply |
 | `routing_context` | object | Context used for routing decisions (chat_type, command, has_media, media_type, user_role, is_reply, is_forward) |
 | `payload` | object | Raw Telegram data (file metadata for media; `{}` for text/commands) |
 
@@ -84,6 +85,7 @@ Example:
     "username": "john_doe",
     "language_code": "en"
   },
+  "reply_to_message_id": null,
   "routing_context": {
     "chat_type": "private",
     "command": "start",
@@ -125,6 +127,7 @@ When `event_type` is `"callback_query"`, the envelope includes two additional to
     "username": "john_doe",
     "language_code": "en"
   },
+  "reply_to_message_id": null,
   "routing_context": {
     "chat_type": "private"
   },

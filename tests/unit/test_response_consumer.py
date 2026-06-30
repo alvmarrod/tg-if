@@ -706,3 +706,25 @@ class TestDeleteMessage:
         assert b'"failed"' in pos_args[0].body
         assert b'"MESSAGE_DELETE_FORBIDDEN"' in pos_args[0].body
         assert kwargs["routing_key"] == "amq.gen-reply"
+
+    async def test_handle_delete_message_normalizes_message_id(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+        mock_manager: MagicMock,
+    ) -> None:
+        body = {
+            "response_id": "resp_del_4",
+            "correlation_id": "evt_del_4",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "delete_message",
+            "payload": {"message_id": 42},
+        }
+
+        await consumer.handle(body)
+
+        mock_clients["aibot"].delete_message.assert_awaited_once_with(
+            chat_id=12345, message_ids=42
+        )

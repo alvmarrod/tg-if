@@ -105,6 +105,7 @@ es `"incoming.events.supportbot.commands"`, esa es la routing key exacta.
     "username": "john_doe",
     "language_code": "en"
   },
+  "reply_to_message_id": null,
   "routing_context": {
     "chat_type": "private",
     "command": "start",
