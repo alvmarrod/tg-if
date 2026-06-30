@@ -101,6 +101,7 @@ def message_event_reply() -> MessageEvent:
         message_id=103,
         text="A reply",
         is_reply=True,
+        reply_to_message_id=42,
     )
 
 

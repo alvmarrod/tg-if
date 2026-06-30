@@ -183,6 +183,7 @@ outgoing.responses
     "username": "john_doe",
     "language_code": "en"
   },
+  "reply_to_message_id": null,
   "routing_context": {
     "chat_type": "private",
     "command": "start",

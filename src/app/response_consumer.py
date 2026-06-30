@@ -231,6 +231,9 @@ class ResponseConsumer:
             return
 
         kwargs = dict(response.payload)
+        if rtype == "delete_message":
+            if "message_id" in kwargs and "message_ids" not in kwargs:
+                kwargs["message_ids"] = kwargs.pop("message_id")
         resolved_hashes: list[str] = []
         for key in _UPLOAD_KEYS:
             if key in kwargs:

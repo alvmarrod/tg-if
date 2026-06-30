@@ -54,7 +54,7 @@ Telegram MTProto gateway service that receives events via Pyrofork, routes them 
 - **Media retrieval**: Hybrid eager/lazy HTTP proxy for media files (see `doc/media_retrieval.md`)
 - **Media upload**: Sequential HTTP upload → `upl_<hash>` reference in OutgoingResponse with Telegram file_id caching (see `doc/subscriber_media_interface_esp.md`)
 - **Delete messages**: `delete_message` response type for removing messages via Pyrofork `delete_messages`
-- **Enriched event envelopes**: Subscribers receive `message_id`, `text`, `caption`, `command_args`, and `from_user` on every incoming event
+- **Enriched event envelopes**: Subscribers receive `message_id`, `text`, `caption`, `command_args`, `from_user`, and `reply_to_message_id` on every incoming event
 
 ## 🚀 Configuration
 

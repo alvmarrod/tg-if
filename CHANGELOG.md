@@ -4,6 +4,7 @@
 
 ### Added
 
+- `reply_to_message_id` in incoming event envelopes: subscribers now receive the original message ID when a Telegram message is a reply, restoring reply context for downstream logic
 - Lifecycle management: `/shutdown` (disconnect broker, stop receivers, keep process alive), `/start` (reconnect and restart receivers), `/restart` (shutdown + exit with code 0 for container restart)
 - `on_start` and `on_restart` callbacks to `AdminCommandHandler`
 - MTProto gateway service with Pyrofork integration

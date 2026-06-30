@@ -92,6 +92,7 @@ class TestEventDispatcher:
         assert envelope["text"] == "Hello world"
         assert envelope["caption"] is None
         assert envelope["from_user"] is None
+        assert envelope["reply_to_message_id"] is None
         assert "callback_id" not in envelope
         assert "callback_data" not in envelope
 
@@ -238,3 +239,33 @@ class TestEventDispatcher:
         envelope = args[1]
         assert envelope["text"] == "/start"
         assert envelope["command_args"] == []
+        assert envelope["reply_to_message_id"] is None
+
+    async def test_dispatch_reply_envelope_includes_reply_to_message_id(
+        self,
+        dispatcher: EventDispatcher,
+        context_reply: RoutingContext,
+        mock_publisher: AsyncMock,
+    ) -> None:
+        from domain.entities import MessageEvent
+
+        event = MessageEvent(
+            event_id="evt_reply_1",
+            bot_id="aibot",
+            chat_id=12345,
+            user_id=67890,
+            message_id=200,
+            text="replying",
+            is_reply=True,
+            reply_to_message_id=42,
+        )
+        dispatcher._rules["aibot"] = [
+            RoutingRule(condition={"event_type": "message"}, target="topic.messages"),
+        ]
+
+        await dispatcher.dispatch(event, context_reply)
+
+        args, _ = mock_publisher.publish.await_args
+        envelope = args[1]
+        assert envelope["reply_to_message_id"] == 42
+        assert envelope["routing_context"]["is_reply"] is True
