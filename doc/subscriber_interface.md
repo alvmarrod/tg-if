@@ -64,6 +64,35 @@ Conditional fields:
 Example:
 
 ```json
+{
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": 1706543210.123,
+  "bot_id": "aibot",
+  "event_type": "command",
+  "event_subtype": "text",
+  "chat_id": 12345,
+  "user_id": 67890,
+  "message_id": 100,
+  "text": "/start",
+  "caption": null,
+  "command_args": [],
+  "from_user": {
+    "id": 67890,
+    "is_bot": false,
+    "first_name": "John",
+    "last_name": null,
+    "username": "john_doe",
+    "language_code": "en"
+  },
+  "routing_context": {
+    "chat_type": "private",
+    "command": "start",
+    "has_media": false,
+    "user_role": null
+  },
+  "payload": {}
+}
+```
 
 ### Callback Events
 

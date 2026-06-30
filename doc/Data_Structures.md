@@ -26,7 +26,7 @@
 | TelegramUpdate | Data Structure | Adapter/wrapper for raw Pyrofork updates |
 | SessionInfo | Data Structure | Session status and metadata (connected/disconnected, uptime) |
 | TelegramResponseFormat | Data Structure | Telegram-specific formatting (parse_mode, reply_markup JSON) |
-| IncomingEnvelope | Data Structure | Complete message envelope for incoming events (with partition_key, routing_context) |
+| IncomingEnvelope | Data Structure | Complete message envelope for incoming events (with routing_context) |
 | OutgoingEnvelope | Data Structure | Complete message envelope for outgoing responses |
 | PublishResult | Data Structure | Result of publish operation to broker |
 | **App Layer** | | |
