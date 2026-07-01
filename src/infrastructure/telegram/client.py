@@ -334,3 +334,77 @@ class TelegramClient:
         event = reaction_count_updated_to_event(self._bot_id, reaction)
         context = RoutingContext(chat_type=ChatType.PRIVATE)
         await self._event_callback(event, context)
+
+    async def get_dialogs(self) -> list[Any]:
+        """Iterate all dialogs the bot has access to.
+
+        Returns lightweight dicts with chat_id, title, type, members,
+        permissions instead of raw Pyrogram Dialog objects.
+        """
+        dialogs: list[Any] = []
+        gen = self._client.get_dialogs()
+        if gen is None:
+            return dialogs
+        async for dialog in gen:
+            chat = dialog.chat
+            permissions = getattr(chat, "permissions", None)
+            dialogs.append(
+                {
+                    "chat_id": chat.id,
+                    "title": chat.title
+                    or f"{chat.first_name or ''} {chat.last_name or ''}".strip(),
+                    "type": str(chat.type).split(".")[-1].lower()
+                    if chat.type
+                    else "unknown",
+                    "members": getattr(chat, "member_count", 0) or 0,
+                    "can_read": permissions.can_send_messages if permissions else False,
+                    "can_write": permissions.can_send_messages
+                    if permissions
+                    else False,
+                }
+            )
+        return dialogs
+
+    async def get_chat_history(
+        self,
+        chat_id: int,
+        limit: int = 0,
+        offset_id: int = 0,
+        offset_date: Any = None,
+    ) -> list[Any]:
+        """Fetch chat history messages.
+
+        Returns a list of Pyrogram Message objects (already iterated).
+        When limit=0 returns up to Telegram's max per-page (typically 100).
+        For full history the caller must paginate.
+        """
+        messages: list[Any] = []
+        gen = self._client.get_chat_history(
+            chat_id=chat_id,
+            limit=limit,
+            offset_id=offset_id,
+            offset_date=offset_date,
+        )
+        if gen is not None:
+            async for msg in gen:
+                messages.append(msg)
+        return messages
+
+    async def download_media(
+        self,
+        message: Any,
+        file_path: str,
+    ) -> str | None:
+        """Download media from a message to disk.
+
+        Returns the local file path, or None on failure.
+        """
+        result = await self._client.download_media(
+            message=message,
+            file_name=file_path,
+        )
+        if result is None:
+            return None
+        if isinstance(result, str):
+            return result
+        return None
