@@ -268,6 +268,7 @@ class ResponseConsumer:
                 bot_id=response.bot_id,
                 response_type=response.response_type,
             )
+            message_id = getattr(result, "id", None) if result is not None else None
             await self._publish_result(
                 response.reply_to,
                 OutgoingResponseResult(
@@ -275,6 +276,7 @@ class ResponseConsumer:
                     correlation_id=response.correlation_id,
                     bot_id=response.bot_id,
                     chat_id=response.chat_id,
+                    message_id=message_id,
                     status="delivered",
                 ),
             )

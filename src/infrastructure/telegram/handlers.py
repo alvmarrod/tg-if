@@ -15,6 +15,8 @@ from domain.entities import (
     EditedCommandEvent,
     EditedMessageEvent,
     MessageEvent,
+    MessageReactionCountUpdatedEvent,
+    MessageReactionUpdatedEvent,
     RoutingContext,
 )
 
@@ -195,6 +197,72 @@ def edited_message_to_event(
         raw_payload=media_raw,
         is_reply=is_reply,
         is_forward=is_forward,
+    )
+
+
+def _extract_reaction_emoji(reactions: list[Any]) -> str:
+    """Extract the first emoji from a Pyrofork Reaction list."""
+    if not reactions:
+        return ""
+    r = reactions[0]
+    return getattr(r, "emoji", "") or ""
+
+
+def reaction_updated_to_event(
+    bot_id: str, reaction: Any
+) -> MessageReactionUpdatedEvent:
+    from_user = _extract_from_user(getattr(reaction, "from_user", None))
+
+    new_reaction = getattr(reaction, "new_reaction", []) or []
+    old_reaction = getattr(reaction, "old_reaction", []) or []
+
+    return MessageReactionUpdatedEvent(
+        event_id=f"ru_{reaction.id}_{getattr(reaction, 'date', 0)}",
+        bot_id=bot_id,
+        chat_id=reaction.chat.id if reaction.chat else 0,
+        user_id=from_user["id"] if from_user else 0,
+        from_user=from_user,
+        message_id=reaction.id,
+        reaction_emoji=_extract_reaction_emoji(new_reaction),
+        old_reaction_emoji=_extract_reaction_emoji(old_reaction) or None,
+        raw_payload={},
+        update_type="message_reaction_updated",
+    )
+
+
+def context_from_reaction_updated(reaction: Any) -> RoutingContext:
+    new_reaction = getattr(reaction, "new_reaction", []) or []
+    old_reaction = getattr(reaction, "old_reaction", []) or []
+    return RoutingContext(
+        chat_type=ChatType(
+            reaction.chat.type.value
+            if reaction.chat and reaction.chat.type
+            else "private"
+        ),
+        reaction_emoji=_extract_reaction_emoji(new_reaction) or None,
+        old_reaction_emoji=_extract_reaction_emoji(old_reaction) or None,
+    )
+
+
+def reaction_count_updated_to_event(
+    bot_id: str, reaction: Any
+) -> MessageReactionCountUpdatedEvent:
+    raw_reactions = getattr(reaction, "reactions", []) or []
+    reactions_list = [
+        {"emoji": getattr(r, "emoji", ""), "count": getattr(r, "count", 0)}
+        for r in raw_reactions
+    ]
+
+    return MessageReactionCountUpdatedEvent(
+        event_id=f"rc_{reaction.message_id}_{getattr(reaction, 'date', 0)}",
+        bot_id=bot_id,
+        chat_id=reaction.chat.id if reaction.chat else 0,
+        user_id=0,
+        from_user=None,
+        message_id=reaction.message_id,
+        reactions=reactions_list,
+        raw_payload={},
+        update_type="message_reaction_count_updated",
     )
 
 

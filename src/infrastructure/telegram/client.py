@@ -7,16 +7,19 @@ from pyrogram.enums import ParseMode
 from pyrogram.handlers import DisconnectHandler
 from pyrogram.types import BotCommand, InputMediaPhoto, InputMediaVideo, Message
 
-from domain.entities import RoutingContext, TelegramEvent
+from domain.entities import ChatType, RoutingContext, TelegramEvent
 from infrastructure.config import BotConfig
 from infrastructure.telegram.handlers import (
     build_reply_markup,
     callback_to_event,
     context_from_callback,
+    context_from_reaction_updated,
     edited_message_to_event,
     extract_routing_context,
     message_to_event,
     parse_session_path,
+    reaction_count_updated_to_event,
+    reaction_updated_to_event,
 )
 
 
@@ -56,6 +59,10 @@ class TelegramClient:
         self._client.on_message()(self._on_message)
         self._client.on_edited_message()(self._on_edited_message)
         self._client.on_callback_query()(self._on_callback_query)
+        self._client.on_message_reaction_updated()(self._on_message_reaction_updated)
+        self._client.on_message_reaction_count_updated()(
+            self._on_message_reaction_count_updated
+        )
         self._client.add_handler(DisconnectHandler(self._on_disconnect_handler))
 
     @property
@@ -288,6 +295,7 @@ class TelegramClient:
         if self._event_callback is None:
             return
         event = message_to_event(self._bot_id, message)
+        event.update_type = "message"
         context = extract_routing_context(message)
         await self._event_callback(event, context)
 
@@ -295,6 +303,7 @@ class TelegramClient:
         if self._event_callback is None:
             return
         event = callback_to_event(self._bot_id, query)
+        event.update_type = "callback_query"
         context = context_from_callback(query)
         await self._event_callback(event, context)
 
@@ -304,5 +313,24 @@ class TelegramClient:
         if self._event_callback is None:
             return
         event = edited_message_to_event(self._bot_id, message)
+        event.update_type = "edited_message"
         context = extract_routing_context(message)
+        await self._event_callback(event, context)
+
+    async def _on_message_reaction_updated(
+        self, client: pyrogram.Client, reaction: Any
+    ) -> None:
+        if self._event_callback is None:
+            return
+        event = reaction_updated_to_event(self._bot_id, reaction)
+        context = context_from_reaction_updated(reaction)
+        await self._event_callback(event, context)
+
+    async def _on_message_reaction_count_updated(
+        self, client: pyrogram.Client, reaction: Any
+    ) -> None:
+        if self._event_callback is None:
+            return
+        event = reaction_count_updated_to_event(self._bot_id, reaction)
+        context = RoutingContext(chat_type=ChatType.PRIVATE)
         await self._event_callback(event, context)

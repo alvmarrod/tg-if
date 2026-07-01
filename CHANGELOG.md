@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-01
+
+### Added
+
+- Reaction event types: incoming event dispatcher now emits `message_reaction_updated` and `message_reaction_count_updated` events with full routing support, including `reaction_emoji` / `old_reaction_emoji` condition matching in the rules engine
+- `update_type` field on `TelegramEvent` base class: each handler sets a string label (`"message"`, `"edited_message"`, `"callback_query"`, `"message_reaction_updated"`, `"message_reaction_count_updated"`) for debugging visibility
+- Enhanced "no matching rule" log now includes `update_type`, `chat_id`, and `user_id`
+
+## [0.1.0] - 2026-07-01
+
 ### Added
 
 - `reply_to_message_id` in incoming event envelopes: subscribers now receive the original message ID when a Telegram message is a reply, restoring reply context for downstream logic
