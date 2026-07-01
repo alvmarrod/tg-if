@@ -10,6 +10,7 @@ import structlog
 from app.admin_commands import AdminCommandHandler
 from app.admin_notifier import AdminNotifier
 from app.bot_command_registry import BotCommandRegistry
+from app.chat_exporter import ChatExportEngine
 from app.subscriber_command_handler import SubscriberCommandHandler
 from domain.schemas import AdminSignalType
 from app.event_dispatcher import EventDispatcher
@@ -81,6 +82,11 @@ class ReceiverService:
             )
             admin_client = TelegramClient(admin_bot_cfg)
             notifier = AdminNotifier(config.admin, client=admin_client)
+            chat_exporter = ChatExportEngine(
+                config=config,
+                clients=self._clients,
+                admin_client=admin_client,
+            )
             cmd_handler = AdminCommandHandler(
                 admin_client=admin_client,
                 user_id=config.admin.user_id,
@@ -94,6 +100,7 @@ class ReceiverService:
                 storage=self._cache,
                 upload_registry=self._upload_registry,
                 upload_storage=self._upload_storage,
+                chat_exporter=chat_exporter,
                 on_shutdown=self.shutdown,
                 on_start=self.start,
                 on_restart=self.restart,
