@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-01
+
+### Added
+
+- Chat export: `/chats` (list accessible chats), `/export` (export to monthly JSONL), `/export-cancel` commands with inline keyboard pause/resume/cancel controls and real-time progress bar
+- `ChatExportEngine` — two-pass (count then export), per-message media dedup by `file_unique_id`, concurrent download via semaphore, `_summary.json` generation
+- Export integration tests: 9 tests covering basic, multi-month, media dedup, reactions, pagination, `--since` (by message_id and date), cancel, summary content
+- `ChatExportEngine` API: `export_chat(chat_id, since, parallelism)`, `pause()`, `resume()`, `cancel()` with single-task `asyncio.Lock`
+- README badges for GitHub tag, MIT license, CI status, Ruff
+
+### Changed
+
+- CI pipeline: `concurrency` group cancels stale runs, removed tag triggers (no more duplicate runs), Docker job switched to `push: false` build-only smoke test; permissions moved to workflow level
+- Engine type hint `dict[str, TelegramClient]` → `Mapping[str, TelegramClient]` for covariant test compatibility
+
+### Fixed
+
+- `_count_messages` / `_export_messages` now filter by `since_msg_id` at the message level (not just pagination offset), fixing `--since <msg_id>` behavior
+- `since_date` parsed from `fromisoformat` now made timezone-aware via `.replace(tzinfo=timezone.utc)`, fixing naive/aware datetime comparison
+- Export cancel test no longer hangs when engine finishes between poll cycles
+- Media mock in integration tests creates real temp files so `os.path.getsize` does not raise `FileNotFoundError`
+- 6 mypy errors in test files: `list`/`dict` type args, `__str__` method-assign, overlapping enum comparison, missing `answer_callback_query`, stale `ExportState` import path
+
 ## [0.2.0] - 2026-07-01
 
 ### Added
