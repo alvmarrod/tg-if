@@ -290,3 +290,48 @@ class SubscriberCommandResponse(BaseModel):
         default_factory=list,
         description="Conflict details if status is nok",
     )
+
+
+class ExportState(str, Enum):
+    """State of a chat export operation."""
+
+    IDLE = "idle"
+    RUNNING = "running"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
+
+
+class ExportProgress(BaseModel):
+    """Progress tracking for a running export."""
+
+    total: int = 0
+    processed: int = 0
+    state: ExportState = ExportState.IDLE
+    media_count: int = 0
+    media_bytes: int = 0
+    current_chat_id: int | None = None
+    start_time: datetime | None = None
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    @property
+    def pct(self) -> float:
+        if self.total == 0:
+            return 0.0
+        return round(self.processed / self.total * 100, 1)
+
+
+class ChatInfo(BaseModel):
+    """Information about a chat for the /chats command."""
+
+    chat_id: int
+    title: str
+    chat_type: ChatType
+    members: int = 0
+    can_read: bool = False
+    can_write: bool = False
+    exportable: bool = False
+    bot_id: str | None = Field(
+        default=None,
+        description="Bot client that has access to this chat",
+    )

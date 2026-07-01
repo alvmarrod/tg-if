@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -8,12 +9,17 @@ from typing import Any
 
 import structlog
 
+from app.chat_exporter import ChatExportEngine
 from app.event_dispatcher import EventDispatcher
 from app.log_buffer import LogBuffer
 from app.media_config import MediaConfigManager
 from app.metrics import ServiceMetrics
 from domain.entities import (
+    CallbackQueryEvent,
+    ChatInfo,
+    ChatType,
     CommandEvent,
+    ExportState,
     MediaConfigRule,
     MediaScope,
     RoutingContext,
@@ -109,6 +115,7 @@ class AdminCommandHandler:
         storage: MediaStorage | None = None,
         upload_registry: UploadRegistry | None = None,
         upload_storage: MediaStorage | None = None,
+        chat_exporter: ChatExportEngine | None = None,
         on_shutdown: Callable[[], Awaitable[None]] | None = None,
         on_start: Callable[[], Awaitable[None]] | None = None,
         on_restart: Callable[[], Awaitable[None]] | None = None,
@@ -125,6 +132,7 @@ class AdminCommandHandler:
         self._storage = storage
         self._upload_registry = upload_registry
         self._upload_storage = upload_storage
+        self._chat_exporter = chat_exporter
         self._on_shutdown = on_shutdown
         self._on_start = on_start
         self._on_restart = on_restart
@@ -150,6 +158,12 @@ class AdminCommandHandler:
             ("upload_list", "List upload records"),
             ("upload_prune", "Prune upload records"),
             ("upload_purge", "Purge all upload records"),
+            ("chats", "List available chats for export"),
+            (
+                "export",
+                "Export chat history: /export <chat_id> [--since <date|msg_id>] [--parallelism N]",
+            ),
+            ("export_cancel", "Cancel running export"),
             ("shutdown", "Disconnect broker and stop service"),
             ("start", "Reconnect broker and restart service"),
             ("restart", "Shutdown and exit for container restart"),
@@ -159,6 +173,11 @@ class AdminCommandHandler:
     async def handle(self, event: TelegramEvent, context: RoutingContext) -> None:
         if event.chat_id != self._user_id:
             return
+
+        if isinstance(event, CallbackQueryEvent):
+            await self._handle_export_callback(event)
+            return
+
         if not isinstance(event, CommandEvent):
             return
 
@@ -183,6 +202,12 @@ class AdminCommandHandler:
             await self._cmd_rule_remove(event.chat_id, args)
         elif cmd == "log":
             await self._cmd_log(event.chat_id, args)
+        elif cmd == "chats":
+            await self._cmd_chats(event.chat_id)
+        elif cmd == "export":
+            await self._cmd_export(event.chat_id, args)
+        elif cmd in ("export-cancel", "export_cancel"):
+            await self._cmd_export_cancel(event.chat_id)
         elif cmd == "shutdown":
             await self._cmd_shutdown(event.chat_id)
         elif cmd == "start":
@@ -239,7 +264,10 @@ class AdminCommandHandler:
             "/media-purge [confirm] — Delete all cached media\n"
             "/upload-list [--sort <col>:<dir>,...] [--bot <n>] — List upload records\n"
             "/upload-prune --keep-first N | --max-size N | --older-than Nd [--bot <n>] — Prune upload records\n"
-            "/upload-purge [confirm] [--bot <n>] — Delete all upload records"
+            "/upload-purge [confirm] [--bot <n>] — Delete all upload records\n"
+            "/chats — List available chats for export\n"
+            "/export <chat_id> [--since <date|msg_id>] [--parallelism N] — Export chat history\n"
+            "/export-cancel — Cancel running export"
         )
         await self._admin.send_text(chat_id, text)
 
@@ -972,3 +1000,151 @@ class AdminCommandHandler:
             chat_id,
             f"Purged {deleted} upload record{'s' if deleted != 1 else ''}",
         )
+
+    async def _cmd_chats(self, chat_id: int) -> None:
+        if not self._clients:
+            await self._admin.send_text(chat_id, "No bot clients available")
+            return
+
+        all_chats: list[ChatInfo] = []
+        seen_ids: set[int] = set()
+
+        for bot_name, client in self._clients.items():
+            try:
+                dialogs = await client.get_dialogs()
+            except Exception:
+                logger.warning("Failed to get dialogs", bot=bot_name, exc_info=True)
+                continue
+            for d in dialogs:
+                if d["chat_id"] in seen_ids:
+                    continue
+                seen_ids.add(d["chat_id"])
+                # TODO: deferred — add --search filter for large chat lists
+                ci = ChatInfo(
+                    chat_id=d["chat_id"],
+                    title=d["title"],
+                    chat_type=ChatType(d["type"]),
+                    members=d["members"],
+                    can_read=d["can_read"],
+                    can_write=d["can_write"],
+                    exportable=d["can_read"],
+                    bot_id=bot_name,
+                )
+                all_chats.append(ci)
+
+        if not all_chats:
+            await self._admin.send_text(chat_id, "No accessible chats found")
+            return
+
+        all_chats.sort(key=lambda c: c.title.lower())
+
+        lines = [
+            "Available chats:",
+            f"{'Title':<30} {'ID':<15} {'Type':<12} {'Members':>8}  Ex",
+        ]
+        for c in all_chats:
+            export_mark = "✅" if c.exportable else "❌"
+            lines.append(
+                f"{c.title[:28]:<30} {c.chat_id:<15} {c.chat_type.value:<12} "
+                f"{c.members:>8}  {export_mark}"
+            )
+        lines.append("")
+        lines.append(
+            f"Total: {len(all_chats)} chat{'s' if len(all_chats) != 1 else ''}"
+        )
+        await self._admin.send_text(chat_id, "\n".join(lines))
+
+    async def _cmd_export(self, chat_id: int, args: list[str]) -> None:
+        if self._chat_exporter is None:
+            await self._admin.send_text(chat_id, "Export service not available")
+            return
+
+        if not args:
+            await self._admin.send_text(
+                chat_id,
+                "Usage: /export <chat_id> [--since <date|msg_id>] [--parallelism N]",
+            )
+            return
+
+        kwargs = _parse_kwargs(args)
+        positional = [a for a in args if not a.startswith("--")]
+
+        if not positional:
+            await self._admin.send_text(chat_id, "Missing chat_id argument")
+            return
+
+        try:
+            target_chat_id = int(positional[0])
+        except ValueError:
+            await self._admin.send_text(chat_id, f"Invalid chat_id: {positional[0]}")
+            return
+
+        since: str | int | None = None
+        since_str = kwargs.get("since")
+        if since_str:
+            if since_str.lstrip("-").isdigit():
+                since = int(since_str)
+            else:
+                since = since_str
+
+        parallelism = 1
+        par_str = kwargs.get("parallelism")
+        if par_str:
+            try:
+                parallelism = max(1, int(par_str))
+            except ValueError:
+                await self._admin.send_text(
+                    chat_id, f"Invalid parallelism value: {par_str}"
+                )
+                return
+
+        if self._chat_exporter.state == ExportState.CANCELLED:
+            self._chat_exporter._progress.state = ExportState.IDLE
+
+        if self._chat_exporter.state not in (ExportState.IDLE,):
+            await self._admin.send_text(
+                chat_id,
+                f"Export already in progress (state: {self._chat_exporter.state.value})",
+            )
+            return
+
+        await self._admin.send_text(
+            chat_id,
+            f"Starting export of chat {target_chat_id}...",
+        )
+
+        asyncio.ensure_future(
+            self._chat_exporter.export_chat(
+                chat_id=target_chat_id,
+                since=since,
+                parallelism=parallelism,
+            )
+        )
+
+    async def _cmd_export_cancel(self, chat_id: int) -> None:
+        if self._chat_exporter is None:
+            await self._admin.send_text(chat_id, "Export service not available")
+            return
+        if self._chat_exporter.state != ExportState.RUNNING:
+            await self._admin.send_text(chat_id, "No export is currently running")
+            return
+        self._chat_exporter.cancel()
+        await self._admin.send_text(chat_id, "Export cancelled")
+
+    async def _handle_export_callback(self, event: CallbackQueryEvent) -> None:
+        if self._chat_exporter is None:
+            return
+        action = event.callback_data
+        if action == "export:pause":
+            self._chat_exporter.pause()
+            await self._admin.answer_callback_query(event.callback_id, "Export paused")
+        elif action == "export:resume":
+            self._chat_exporter.resume()
+            await self._admin.answer_callback_query(event.callback_id, "Export resumed")
+        elif action == "export:cancel":
+            self._chat_exporter.cancel()
+            await self._admin.answer_callback_query(
+                event.callback_id, "Export cancelled"
+            )
+        else:
+            await self._admin.answer_callback_query(event.callback_id)
