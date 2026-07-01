@@ -8,6 +8,8 @@ from domain.entities import (
     EditedCommandEvent,
     EditedMessageEvent,
     MessageEvent,
+    MessageReactionCountUpdatedEvent,
+    MessageReactionUpdatedEvent,
     RoutingContext,
     TelegramEvent,
 )
@@ -28,6 +30,10 @@ def resolve_subtype(event: TelegramEvent) -> str | None:
     if isinstance(event, (MessageEvent, EditedMessageEvent)):
         return event.media_type or "text"
     if isinstance(event, (CommandEvent, EditedCommandEvent, CallbackQueryEvent)):
+        return "text"
+    if isinstance(
+        event, (MessageReactionUpdatedEvent, MessageReactionCountUpdatedEvent)
+    ):
         return "text"
     return None
 
@@ -83,6 +89,10 @@ def _match_condition(
             actual = context.is_reply
         elif key == "is_forward":
             actual = context.is_forward
+        elif key == "reaction_emoji":
+            actual = context.reaction_emoji
+        elif key == "old_reaction_emoji":
+            actual = context.old_reaction_emoji
         else:
             continue
 

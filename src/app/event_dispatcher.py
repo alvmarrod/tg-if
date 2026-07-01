@@ -7,7 +7,13 @@ from typing import Any
 import structlog
 
 from app.metrics import ServiceMetrics
-from domain.entities import CallbackQueryEvent, RoutingContext, TelegramEvent
+from domain.entities import (
+    CallbackQueryEvent,
+    MessageReactionCountUpdatedEvent,
+    MessageReactionUpdatedEvent,
+    RoutingContext,
+    TelegramEvent,
+)
 from infrastructure import metrics_exporter as prom
 from domain.rules import RoutingDecision, RoutingRule, RulesEngine, resolve_subtype
 from infrastructure.broker import Publisher
@@ -64,6 +70,9 @@ class EventDispatcher:
                 "no matching rule",
                 bot=event.bot_id,
                 event_type=event.event_type.value,
+                update_type=event.update_type,
+                chat_id=event.chat_id,
+                user_id=event.user_id,
             )
 
         return decision
@@ -132,5 +141,12 @@ class EventDispatcher:
         if isinstance(event, CallbackQueryEvent):
             envelope["callback_id"] = event.callback_id
             envelope["callback_data"] = event.callback_data
+
+        if isinstance(event, MessageReactionUpdatedEvent):
+            envelope["reaction_emoji"] = event.reaction_emoji
+            envelope["old_reaction_emoji"] = event.old_reaction_emoji
+
+        if isinstance(event, MessageReactionCountUpdatedEvent):
+            envelope["reactions"] = event.reactions
 
         return envelope

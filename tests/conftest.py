@@ -11,6 +11,8 @@ from domain.entities import (
     EditedCommandEvent,
     EditedMessageEvent,
     MessageEvent,
+    MessageReactionCountUpdatedEvent,
+    MessageReactionUpdatedEvent,
     RoutingContext,
 )
 
@@ -157,6 +159,33 @@ def edited_command_event() -> EditedCommandEvent:
         command="start",
         command_args=["help"],
         text="/start help",
+    )
+
+
+@pytest.fixture
+def message_reaction_updated_event() -> MessageReactionUpdatedEvent:
+    return MessageReactionUpdatedEvent(
+        event_id=str(uuid4()),
+        timestamp=datetime.now(timezone.utc),
+        bot_id="aibot",
+        chat_id=12345,
+        user_id=67890,
+        message_id=200,
+        reaction_emoji="👍",
+        old_reaction_emoji="❤️",
+    )
+
+
+@pytest.fixture
+def message_reaction_count_updated_event() -> MessageReactionCountUpdatedEvent:
+    return MessageReactionCountUpdatedEvent(
+        event_id=str(uuid4()),
+        timestamp=datetime.now(timezone.utc),
+        bot_id="aibot",
+        chat_id=12345,
+        user_id=0,
+        message_id=200,
+        reactions=[{"emoji": "👍", "count": 3}, {"emoji": "❤️", "count": 1}],
     )
 
 

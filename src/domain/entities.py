@@ -14,6 +14,8 @@ class EventType(str, Enum):
     CALLBACK_QUERY = "callback_query"
     INLINE_QUERY = "inline_query"
     EDITED_MESSAGE = "edited_message"
+    MESSAGE_REACTION_UPDATED = "message_reaction_updated"
+    MESSAGE_REACTION_COUNT_UPDATED = "message_reaction_count_updated"
 
 
 class ChatType(str, Enum):
@@ -35,6 +37,8 @@ class RoutingContext(BaseModel):
     command: Optional[str] = None  # e.g., "/start", "/help"
     is_reply: bool = False
     is_forward: bool = False
+    reaction_emoji: Optional[str] = None  # emoji for reaction events
+    old_reaction_emoji: Optional[str] = None  # previous emoji for reaction changes
 
     model_config = ConfigDict(use_enum_values=True)
 
@@ -54,6 +58,10 @@ class TelegramEvent(BaseModel):
     )
     raw_payload: dict[str, Any] = Field(
         default_factory=dict, description="Raw Telegram update"
+    )
+    update_type: str | None = Field(
+        default=None,
+        description="Pyrofork handler source: message, edited_message, callback_query, message_reaction_updated, etc.",
     )
 
     model_config = ConfigDict(use_enum_values=True)
@@ -152,6 +160,28 @@ class EditedCommandEvent(TelegramEvent):
     text: str = Field(..., description="Full message text")
 
 
+class MessageReactionUpdatedEvent(TelegramEvent):
+    """Per-user reaction change on a bot message."""
+
+    event_type: EventType = EventType.MESSAGE_REACTION_UPDATED
+    message_id: int
+    reaction_emoji: str = Field(..., description="The new reaction emoji")
+    old_reaction_emoji: str | None = Field(
+        default=None, description="Previous reaction emoji, None if first reaction"
+    )
+
+
+class MessageReactionCountUpdatedEvent(TelegramEvent):
+    """Aggregate anonymous reaction count change."""
+
+    event_type: EventType = EventType.MESSAGE_REACTION_COUNT_UPDATED
+    message_id: int
+    reactions: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of {emoji, count} dicts for all reactions on the message",
+    )
+
+
 class MediaScope(str, Enum):
     """Scope for media config rules."""
 
@@ -217,6 +247,7 @@ class OutgoingResponseResult(BaseModel):
     correlation_id: str
     bot_id: str
     chat_id: int
+    message_id: int | None = None
     status: Literal["delivered", "failed"]
     error_type: str | None = None
     error_message: str | None = None
