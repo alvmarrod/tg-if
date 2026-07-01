@@ -54,6 +54,7 @@ Telegram MTProto gateway service that receives events via Pyrofork, routes them 
 - **Media retrieval**: Hybrid eager/lazy HTTP proxy for media files (see `doc/media_retrieval.md`)
 - **Media upload**: Sequential HTTP upload → `upl_<hash>` reference in OutgoingResponse with Telegram file_id caching (see `doc/subscriber_media_interface_esp.md`)
 - **Delete messages**: `delete_message` response type for removing messages via Pyrofork `delete_messages`
+- **Edited message handling**: Subscribers receive `edited_message` events with full message context when a user edits a previously sent message (text, command, or media)
 - **Enriched event envelopes**: Subscribers receive `message_id`, `text`, `caption`, `command_args`, `from_user`, and `reply_to_message_id` on every incoming event
 
 ## 🚀 Configuration
@@ -90,6 +91,7 @@ On first run, bots configured with `bot_token` authenticate automatically (prefe
 | ------- | --------- | ----------- |
 | `incoming.events.{bot}.commands.*` | Published | Command events (e.g., /start, /help) |
 | `incoming.events.{bot}.messages.*` | Published | Regular messages (text, media) |
+| `incoming.events.{bot}.edited_messages.*` | Published | Edited messages (text, command, media edits) |
 | `incoming.events.{bot}.callbacks.*` | Published | Inline button callbacks |
 | `incoming.events.{bot}.unhandled` | Published | Events not matching any rule |
 | `outgoing.responses` | Consumed | Responses to send to Telegram |

@@ -8,6 +8,8 @@ from domain.entities import (
     CallbackQueryEvent,
     ChatType,
     CommandEvent,
+    EditedCommandEvent,
+    EditedMessageEvent,
     MessageEvent,
     RoutingContext,
 )
@@ -127,6 +129,35 @@ def context_reply() -> RoutingContext:
 @pytest.fixture
 def context_forward() -> RoutingContext:
     return RoutingContext(chat_type=ChatType.PRIVATE, is_forward=True)
+
+
+@pytest.fixture
+def edited_message_event_text() -> EditedMessageEvent:
+    return EditedMessageEvent(
+        event_id=str(uuid4()),
+        timestamp=datetime.now(timezone.utc),
+        bot_id="aibot",
+        chat_id=12345,
+        user_id=67890,
+        message_id=100,
+        text="Hello world (edited)",
+    )
+
+
+@pytest.fixture
+def edited_command_event() -> EditedCommandEvent:
+    return EditedCommandEvent(
+        event_id=str(uuid4()),
+        timestamp=datetime.now(timezone.utc),
+        bot_id="aibot",
+        chat_id=12345,
+        user_id=67890,
+        message_id=102,
+        reply_to_message_id=None,
+        command="start",
+        command_args=["help"],
+        text="/start help",
+    )
 
 
 @pytest.fixture
