@@ -1,5 +1,10 @@
 # tg-if
 
+![GitHub Tag](https://img.shields.io/github/v/tag/alvmarrod/tg-if)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/alvmarrod/tg-if/actions/workflows/ci.yml/badge.svg)](https://github.com/alvmarrod/tg-if/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+
 Telegram MTProto gateway service that receives events via Pyrofork, routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
 
 ## 🧩 Architecture
