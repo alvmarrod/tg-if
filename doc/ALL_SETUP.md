@@ -133,6 +133,7 @@ Examples:
 - `incoming.events.aibot.messages.text`
 - `incoming.events.aibot.messages.image`
 - `incoming.events.salesbot.callbacks.product`
+- `incoming.events.aibot.edited_message.text`
 
 Outgoing responses:
 

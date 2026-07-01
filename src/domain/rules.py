@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from domain.entities import (
     CallbackQueryEvent,
     CommandEvent,
+    EditedCommandEvent,
+    EditedMessageEvent,
     MessageEvent,
     RoutingContext,
     TelegramEvent,
@@ -23,9 +25,9 @@ class RoutingDecision(BaseModel):
 
 
 def resolve_subtype(event: TelegramEvent) -> str | None:
-    if isinstance(event, MessageEvent):
+    if isinstance(event, (MessageEvent, EditedMessageEvent)):
         return event.media_type or "text"
-    if isinstance(event, (CommandEvent, CallbackQueryEvent)):
+    if isinstance(event, (CommandEvent, EditedCommandEvent, CallbackQueryEvent)):
         return "text"
     return None
 

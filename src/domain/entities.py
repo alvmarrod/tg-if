@@ -110,6 +110,48 @@ class CallbackQueryEvent(TelegramEvent):
     message_id: Optional[int] = None
 
 
+class EditedMessageEvent(TelegramEvent):
+    """Edited message event (text or media was edited)."""
+
+    event_type: EventType = EventType.EDITED_MESSAGE
+    message_id: int
+    text: Optional[str] = None
+    caption: Optional[str] = None
+    media_type: Optional[str] = None
+    has_media: bool = False
+    is_reply: bool = False
+    reply_to_message_id: int | None = None
+    is_forward: bool = False
+    file_id: Optional[str] = Field(
+        default=None, description="Telegram file_id (session-specific, can download)"
+    )
+    file_unique_id: Optional[str] = Field(
+        default=None,
+        description="Telegram file_unique_id (permanent, content-based dedup key)",
+    )
+    media_status: str = Field(
+        default="pending",
+        description='Media availability: "pending" or "ready"',
+    )
+    media_url: Optional[str] = Field(
+        default=None,
+        description="URL to fetch the media via tg-if HTTP proxy",
+    )
+
+
+class EditedCommandEvent(TelegramEvent):
+    """Edited command event (a command message was edited)."""
+
+    event_type: EventType = EventType.EDITED_MESSAGE
+    message_id: int
+    reply_to_message_id: int | None = None
+    command: str = Field(..., description="Command without slash, e.g., 'start'")
+    command_args: list[str] = Field(
+        default_factory=list, description="Arguments after command"
+    )
+    text: str = Field(..., description="Full message text")
+
+
 class MediaScope(str, Enum):
     """Scope for media config rules."""
 

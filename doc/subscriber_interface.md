@@ -38,7 +38,7 @@ All events share these top-level fields:
 | `event_id` | string | UUID v4 identifying this event |
 | `timestamp` | float | Unix timestamp of when the envelope was built |
 | `bot_id` | string | Bot that received the event |
-| `event_type` | string | `"message"`, `"command"`, `"callback_query"` |
+| `event_type` | string | `"message"`, `"command"`, `"callback_query"`, `"edited_message"` |
 | `event_subtype` | string or null | `"text"`, `"photo"`, `"video"`, `"audio"`, `"document"`, or `null` |
 | `chat_id` | integer | Telegram chat ID |
 | `user_id` | integer | Telegram user ID of the sender |
@@ -77,6 +77,50 @@ Example:
   "text": "/start",
   "caption": null,
   "command_args": [],
+  "from_user": {
+    "id": 67890,
+    "is_bot": false,
+    "first_name": "John",
+    "last_name": null,
+    "username": "john_doe",
+    "language_code": "en"
+  },
+  "reply_to_message_id": null,
+  "routing_context": {
+    "chat_type": "private",
+    "command": "start",
+    "has_media": false,
+    "user_role": null
+  },
+  "payload": {}
+}
+```
+
+### Edited Message Events
+
+When `event_type` is `"edited_message"`, the envelope carries the same fields as a regular message or command, but reflects the **updated** content after a user edited their message. Edited commands include `command`, `command_args`, and `text`. Edited media (e.g., a photo caption change) includes `file_id`, `file_unique_id`, `media_type`, etc.
+
+The routing key pattern is:
+
+```text
+incoming.events.{bot_name}.edited_message.{subtype}
+```
+
+Example (edited command):
+
+```json
+{
+  "event_id": "550e8400-e29b-41d4-a716-446655440002",
+  "timestamp": 1706543220.789,
+  "bot_id": "aibot",
+  "event_type": "edited_message",
+  "event_subtype": "text",
+  "chat_id": 12345,
+  "user_id": 67890,
+  "message_id": 100,
+  "text": "/start help",
+  "caption": null,
+  "command_args": ["help"],
   "from_user": {
     "id": 67890,
     "is_bot": false,

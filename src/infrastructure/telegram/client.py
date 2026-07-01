@@ -13,6 +13,7 @@ from infrastructure.telegram.handlers import (
     build_reply_markup,
     callback_to_event,
     context_from_callback,
+    edited_message_to_event,
     extract_routing_context,
     message_to_event,
     parse_session_path,
@@ -53,6 +54,7 @@ class TelegramClient:
             kwargs["bot_token"] = config.bot_token
         self._client = pyrogram.Client(**kwargs)
         self._client.on_message()(self._on_message)
+        self._client.on_edited_message()(self._on_edited_message)
         self._client.on_callback_query()(self._on_callback_query)
         self._client.add_handler(DisconnectHandler(self._on_disconnect_handler))
 
@@ -294,4 +296,13 @@ class TelegramClient:
             return
         event = callback_to_event(self._bot_id, query)
         context = context_from_callback(query)
+        await self._event_callback(event, context)
+
+    async def _on_edited_message(
+        self, client: pyrogram.Client, message: Message
+    ) -> None:
+        if self._event_callback is None:
+            return
+        event = edited_message_to_event(self._bot_id, message)
+        context = extract_routing_context(message)
         await self._event_callback(event, context)

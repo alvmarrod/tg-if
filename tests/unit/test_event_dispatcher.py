@@ -5,7 +5,12 @@ from typing import Any
 import pytest
 
 from app.event_dispatcher import EventDispatcher
-from domain.entities import CallbackQueryEvent, RoutingContext, TelegramEvent
+from domain.entities import (
+    CallbackQueryEvent,
+    EditedCommandEvent,
+    RoutingContext,
+    TelegramEvent,
+)
 from domain.rules import RoutingRule
 from infrastructure.broker import Publisher
 
@@ -269,3 +274,57 @@ class TestEventDispatcher:
         envelope = args[1]
         assert envelope["reply_to_message_id"] == 42
         assert envelope["routing_context"]["is_reply"] is True
+
+    async def test_dispatch_edited_message_has_expected_structure(
+        self,
+        dispatcher: EventDispatcher,
+        edited_message_event_text: Any,
+        private_context: RoutingContext,
+        mock_publisher: AsyncMock,
+    ) -> None:
+        dispatcher._rules["aibot"] = [
+            RoutingRule(
+                condition={"event_type": "edited_message"},
+                target="topic.edits",
+            ),
+        ]
+
+        await dispatcher.dispatch(edited_message_event_text, private_context)
+
+        args, _ = mock_publisher.publish.await_args
+        envelope = args[1]
+        assert envelope["event_type"] == "edited_message"
+        assert envelope["event_subtype"] == "text"
+        assert envelope["bot_id"] == "aibot"
+        assert envelope["chat_id"] == 12345
+        assert envelope["user_id"] == 67890
+        assert envelope["message_id"] == 100
+        assert envelope["text"] == "Hello world (edited)"
+        assert envelope["caption"] is None
+        assert envelope["from_user"] is None
+        assert envelope["reply_to_message_id"] is None
+        assert "callback_id" not in envelope
+        assert "callback_data" not in envelope
+
+    async def test_dispatch_edited_command_includes_command_args(
+        self,
+        dispatcher: EventDispatcher,
+        edited_command_event: EditedCommandEvent,
+        private_context: RoutingContext,
+        mock_publisher: AsyncMock,
+    ) -> None:
+        dispatcher._rules["aibot"] = [
+            RoutingRule(
+                condition={"event_type": "edited_message"},
+                target="topic.edits",
+            ),
+        ]
+
+        await dispatcher.dispatch(edited_command_event, private_context)
+
+        args, _ = mock_publisher.publish.await_args
+        envelope = args[1]
+        assert envelope["event_type"] == "edited_message"
+        assert envelope["text"] == "/start help"
+        assert envelope["command_args"] == ["help"]
+        assert envelope["reply_to_message_id"] is None

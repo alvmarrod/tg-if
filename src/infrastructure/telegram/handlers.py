@@ -12,6 +12,8 @@ from domain.entities import (
     CallbackQueryEvent,
     ChatType,
     CommandEvent,
+    EditedCommandEvent,
+    EditedMessageEvent,
     MessageEvent,
     RoutingContext,
 )
@@ -125,6 +127,58 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
     is_forward = message.forward_origin is not None
 
     return MessageEvent(
+        event_id=str(message.id),
+        bot_id=bot_id,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id if message.from_user else 0,
+        from_user=from_user,
+        message_id=message.id,
+        reply_to_message_id=reply_to_message_id,
+        text=message.text,
+        caption=message.caption,
+        has_media=has_media,
+        media_type=media_type,
+        file_id=file_id,
+        file_unique_id=file_unique_id,
+        raw_payload=media_raw,
+        is_reply=is_reply,
+        is_forward=is_forward,
+    )
+
+
+def edited_message_to_event(
+    bot_id: str, message: Message
+) -> EditedMessageEvent | EditedCommandEvent:
+    command, args = _detect_command(message.text)
+
+    from_user = _extract_from_user(message.from_user)
+    reply_to_message_id = message.reply_to_message_id
+
+    if command is not None:
+        return EditedCommandEvent(
+            event_id=str(message.id),
+            bot_id=bot_id,
+            chat_id=message.chat.id,
+            user_id=message.from_user.id if message.from_user else 0,
+            from_user=from_user,
+            message_id=message.id,
+            reply_to_message_id=reply_to_message_id,
+            command=command,
+            command_args=args,
+            text=message.text or "",
+            raw_payload={},
+        )
+
+    has_media = message.media is not None
+    media_type = str(message.media.value) if message.media else None
+
+    file_id, file_unique_id, media_raw = (
+        _extract_media_info(message) if has_media else (None, None, {})
+    )
+    is_reply = reply_to_message_id is not None
+    is_forward = message.forward_origin is not None
+
+    return EditedMessageEvent(
         event_id=str(message.id),
         bot_id=bot_id,
         chat_id=message.chat.id,
