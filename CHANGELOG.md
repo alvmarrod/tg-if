@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-02
+
+### Added
+
+- User client architecture for chat export: `UserAccountConfig` model with `api_id`, `api_hash`, `session_file`; optional `user` key in `config/bots.json`; startup session-file guard with clear warning
+- `TelegramClient.is_user` property and `discover_chats()` method — calls Pyrofork's real `get_dialogs()` (user-only MTProto, previously unreachable for bots)
+- `ChatExportEngine._resolve_client` now probes user_client first, then falls back to bot `known_chats` registry + `get_chat_history` probe
+- `/chats` command merges user_client `discover_chats()` results with bot `known_chats` when a user session is configured
+- In-memory chat registry (`_register_chat`/`known_chats`) populated from all incoming event handlers (message, edited_message, callback_query, reactions), replacing broken `get_dialogs()` MTProto call for bot accounts
+- Export integration test: user_client-first resolution with mocked user `get_chat_history`
+- Chat export docs: user account architecture requirement, `tools/auth_user.py` session pre-auth note, `README.md` feature bullet and project tree entries
+- `config/bots.example.json` user key template
+
+### Changed
+
+- `export_chat()` gains `notify_chat_id` parameter — progress messages now sent to admin's private chat instead of export target chat (fixes `CHANNEL_INVALID` when admin bot is not in target chat)
+- `ChatType` enum expanded to 7 values matching Pyrofork: BOT, FORUM, MONOFORUM added
+- `_cmd_chats` skips unknown chat types via try/except ValueError instead of crashing
+- Removed unused `_find_first_client_by_dialogs` method from `ChatExportEngine`
+- `can_read` in dialog output set to `True` (reading is always permitted for chat participants; no `can_read_messages` permission exists in MTProto)
+
+### Fixed
+
+- `get_chat_history()` no longer passes `offset_date=None` to Pyrofork when unset (caused `AttributeError: 'NoneType' has no attribute 'to_bytes'` in `Int(None.to_bytes())`)
+- `get_dialogs()` replaced with `known_chats` property (Pyrofork's `messages.GetDialogs` is user-only; bots always got empty lists)
+- `since_msg_id` filtered at message level in `_count_messages`/`_export_messages` (was only used as pagination offset)
+- `since_date` made timezone-aware via `.replace(tzinfo=timezone.utc)`
+- Export cancel test fixed: polling loop replaced with fixed sleep
+- Media mock creates real temp files for integration tests
+
 ## [0.3.0] - 2026-07-01
 
 ### Added

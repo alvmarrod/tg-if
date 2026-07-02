@@ -19,12 +19,15 @@ class EventType(str, Enum):
 
 
 class ChatType(str, Enum):
-    """Type of Telegram chat."""
+    """Type of Telegram chat. Mirrors Pyrofork's ChatType enum."""
 
     PRIVATE = "private"
+    BOT = "bot"
     GROUP = "group"
     SUPERGROUP = "supergroup"
     CHANNEL = "channel"
+    FORUM = "forum"
+    MONOFORUM = "monoforum"
 
 
 class RoutingContext(BaseModel):

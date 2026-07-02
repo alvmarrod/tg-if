@@ -143,12 +143,16 @@ def _make_engine(
     config: AppConfig,
     mock_client: MagicMock,
     admin_client: MagicMock,
+    user_client: MagicMock | None = None,
 ) -> ChatExportEngine:
-    return ChatExportEngine(
+    engine = ChatExportEngine(
         config=config,
         clients={BOT_NAME: mock_client},
         admin_client=admin_client,
     )
+    if user_client is not None:
+        engine._user_client = user_client
+    return engine
 
 
 async def _delayed_cancel(engine: ChatExportEngine, delay: float = 0.02) -> None:
@@ -169,7 +173,7 @@ class TestExportFlow:
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
         engine = _make_engine(config, client, admin_client)
-        await engine.export_chat(chat_id=CHAT_ID)
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
         assert monthly.exists()
@@ -196,7 +200,7 @@ class TestExportFlow:
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
         engine = _make_engine(config, client, admin_client)
-        await engine.export_chat(chat_id=CHAT_ID)
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         for fname in ("2026-06.json", "2026-07.json", "2026-08.json"):
             fpath = export_dir / str(CHAT_ID) / fname
@@ -220,7 +224,7 @@ class TestExportFlow:
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
         engine = _make_engine(config, client, admin_client)
-        await engine.export_chat(chat_id=CHAT_ID)
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         assert client.download_media.await_count == 2
 
@@ -244,7 +248,7 @@ class TestExportFlow:
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
         engine = _make_engine(config, client, admin_client)
-        await engine.export_chat(chat_id=CHAT_ID)
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
         lines = monthly.read_text().strip().split("\n")
@@ -265,7 +269,7 @@ class TestExportFlow:
             probe=page1,
         )
         engine = _make_engine(config, client, admin_client)
-        await engine.export_chat(chat_id=CHAT_ID)
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
         lines = monthly.read_text().strip().split("\n")
@@ -285,7 +289,7 @@ class TestExportFlow:
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
         engine = _make_engine(config, client, admin_client)
-        await engine.export_chat(chat_id=CHAT_ID, since=20)
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999, since=20)
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
         lines = monthly.read_text().strip().split("\n")
@@ -303,7 +307,9 @@ class TestExportFlow:
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
         engine = _make_engine(config, client, admin_client)
-        await engine.export_chat(chat_id=CHAT_ID, since="2026-06-01")
+        await engine.export_chat(
+            chat_id=CHAT_ID, notify_chat_id=999, since="2026-06-01"
+        )
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
         if monthly.exists():
@@ -321,7 +327,7 @@ class TestExportFlow:
         import asyncio
 
         cancel_task = asyncio.create_task(_delayed_cancel(engine))
-        await engine.export_chat(chat_id=CHAT_ID)
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
         await cancel_task
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
@@ -340,7 +346,7 @@ class TestExportFlow:
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
         engine = _make_engine(config, client, admin_client)
-        await engine.export_chat(chat_id=CHAT_ID)
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         summary_path = export_dir / str(CHAT_ID) / "_summary.json"
         summary = json.loads(summary_path.read_text())
@@ -351,3 +357,19 @@ class TestExportFlow:
         assert isinstance(summary["exported_at"], str)
         assert isinstance(summary["files"], list)
         assert "2026-06.json" in summary["files"]
+
+    async def test_user_client_export(
+        self, export_dir: Path, config: AppConfig, admin_client: MagicMock
+    ) -> None:
+        msgs = [_make_msg(1, "via user"), _make_msg(2, "via user too")]
+        user_client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
+        engine = _make_engine(
+            config, user_client, admin_client, user_client=user_client
+        )
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
+
+        monthly = export_dir / str(CHAT_ID) / "2026-06.json"
+        assert monthly.exists()
+        lines = monthly.read_text().strip().split("\n")
+        assert len(lines) == 2
+        assert json.loads(lines[0])["message_id"] == 1

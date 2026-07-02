@@ -138,3 +138,25 @@ class TestChatInfo:
         )
         assert info.chat_type == ChatType.PRIVATE
         assert info.bot_id is None
+
+    def test_forum_chat_type(self) -> None:
+        info = ChatInfo(
+            chat_id=-100789,
+            title="Forum Group",
+            chat_type=ChatType.FORUM,
+        )
+        assert info.chat_type == ChatType.FORUM
+
+    def test_bot_and_monoforum_chat_types(self) -> None:
+        info = ChatInfo(
+            chat_id=999,
+            title="Bot User",
+            chat_type=ChatType.BOT,
+        )
+        assert info.chat_type == ChatType.BOT
+        info2 = ChatInfo(
+            chat_id=-100888,
+            title="Monoforum",
+            chat_type=ChatType.MONOFORUM,
+        )
+        assert info2.chat_type == ChatType.MONOFORUM

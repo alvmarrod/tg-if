@@ -1,12 +1,12 @@
 # Chat Export System
 
-On-demand export of full chat history (messages, media, reactions) for any chat where the bot is a member, using Pyrofork MTProto directly to disk — no AMQP involved.
+On-demand export of full chat history (messages, media, reactions) for any chat where the configured user account is a member, using a pre-authenticated user MTProto session (not a bot). All export work goes directly to disk — no AMQP involved.
 
 ## Admin Commands
 
 ### `/chats`
 
-Lists all dialogs the bot has access to as a table.
+Lists all dialogs the user account has access to as a table.
 
 | Column | Description |
 |--------|-------------|
@@ -14,8 +14,8 @@ Lists all dialogs the bot has access to as a table.
 | ID | Telegram chat ID (signed 64-bit) |
 | Type | group / supergroup / channel |
 | Members | Member count |
-| Read | Bot has `read_messages` permission |
-| Write | Bot can send messages |
+| Read | Bot can read messages in this chat |
+| Write | Bot can send messages in this chat |
 | Exportable | All prerequisites met for export |
 
 The admin uses this to discover the target `chat_id` for `/export`.
@@ -230,8 +230,11 @@ The `files` array lists every monthly JSONL file produced by the export. A consu
 
 ## Requirements
 
+- A **user MTProto session** must be pre-authenticated before deploying.
+  Run `python tools/auth_user.py` once to create the session file interactively.
+  The session is stored on disk and reused on subsequent starts.
 - The export directory must be on a **bind mount** to persist to the host filesystem
-- Requires `read_messages` permission on the target chat
+- The user account must have access to the target chat (member)
 
 ## Out of Scope (v1)
 

@@ -66,5 +66,10 @@
     "api_hash": "admin_bot_hash",
     "session_file": "sessions/admin.session",
     "user_id": 123456789
+  },
+  "user": {
+    "api_id": 23283537,
+    "api_hash": "your_user_api_hash",
+    "session_file": "sessions/user_session.session"
   }
 }
