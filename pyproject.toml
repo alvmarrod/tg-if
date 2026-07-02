@@ -1,6 +1,6 @@
 [project]
 name = "tg-if"
-version = "0.3.0"
+version = "0.4.0"
 description = "Broker aimed to be used between the Telegram API and a queue broker"
 readme = "README.md"
 requires-python = ">=3.12"
