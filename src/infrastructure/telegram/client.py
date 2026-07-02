@@ -43,6 +43,7 @@ class TelegramClient:
         on_disconnect: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._bot_id = config.name
+        self._bot_token = config.bot_token
         self._event_callback = event_callback
         self._on_connect_cb = on_connect
         self._on_disconnect_cb = on_disconnect
@@ -64,10 +65,38 @@ class TelegramClient:
             self._on_message_reaction_count_updated
         )
         self._client.add_handler(DisconnectHandler(self._on_disconnect_handler))
+        self._known_chats: dict[int, dict[str, Any]] = {}
 
     @property
     def bot_id(self) -> str:
         return self._bot_id
+
+    @property
+    def is_user(self) -> bool:
+        return self._bot_token is None
+
+    @property
+    def known_chats(self) -> list[dict[str, Any]]:
+        """Return lightweight dicts of chats seen by this client."""
+        return list(self._known_chats.values())
+
+    def _register_chat(self, chat: Any) -> None:
+        """Store or update a chat entry from a raw Pyrofork Chat object."""
+        title = chat.title or ""
+        if not title:
+            first = getattr(chat, "first_name", "") or ""
+            last = getattr(chat, "last_name", "") or ""
+            title = f"{first} {last}".strip()
+        self._known_chats[chat.id] = {
+            "chat_id": chat.id,
+            "title": title,
+            "type": str(chat.type).split(".")[-1].lower() if chat.type else "unknown",
+            "members": getattr(chat, "member_count", 0) or 0,
+            "can_read": True,
+            "can_write": getattr(
+                getattr(chat, "permissions", None), "can_send_messages", False
+            ),
+        }
 
     async def start(self) -> None:
         try:
@@ -294,6 +323,7 @@ class TelegramClient:
     async def _on_message(self, client: pyrogram.Client, message: Message) -> None:
         if self._event_callback is None:
             return
+        self._register_chat(message.chat)
         event = message_to_event(self._bot_id, message)
         event.update_type = "message"
         context = extract_routing_context(message)
@@ -302,6 +332,9 @@ class TelegramClient:
     async def _on_callback_query(self, client: pyrogram.Client, query: Any) -> None:
         if self._event_callback is None:
             return
+        chat = getattr(query, "message", None) and getattr(query.message, "chat", None)
+        if chat:
+            self._register_chat(chat)
         event = callback_to_event(self._bot_id, query)
         event.update_type = "callback_query"
         context = context_from_callback(query)
@@ -312,6 +345,7 @@ class TelegramClient:
     ) -> None:
         if self._event_callback is None:
             return
+        self._register_chat(message.chat)
         event = edited_message_to_event(self._bot_id, message)
         event.update_type = "edited_message"
         context = extract_routing_context(message)
@@ -322,6 +356,9 @@ class TelegramClient:
     ) -> None:
         if self._event_callback is None:
             return
+        chat = getattr(reaction, "chat", None)
+        if chat:
+            self._register_chat(chat)
         event = reaction_updated_to_event(self._bot_id, reaction)
         context = context_from_reaction_updated(reaction)
         await self._event_callback(event, context)
@@ -331,33 +368,50 @@ class TelegramClient:
     ) -> None:
         if self._event_callback is None:
             return
+        chat = getattr(reaction, "chat", None)
+        if chat:
+            self._register_chat(chat)
         event = reaction_count_updated_to_event(self._bot_id, reaction)
         context = RoutingContext(chat_type=ChatType.PRIVATE)
         await self._event_callback(event, context)
 
-    async def get_dialogs(self) -> list[Any]:
-        """Iterate all dialogs the bot has access to.
+    async def get_dialogs(self) -> list[dict[str, Any]]:
+        """Return known chats.
 
-        Returns lightweight dicts with chat_id, title, type, members,
-        permissions instead of raw Pyrogram Dialog objects.
+        This method only works for user (non-bot) accounts in Pyrofork.
+        For bot accounts, chats are tracked locally via _register_chat()
+        as they appear in incoming events. Use the known_chats property
+        instead for a full list.
         """
-        dialogs: list[Any] = []
+        return self.known_chats
+
+    async def discover_chats(self) -> list[dict[str, Any]]:
+        """Call Pyrofork's real get_dialogs() to discover all accessible chats.
+
+        Only works for user (non-bot) accounts via MTProto.
+        Bots will get BOT_METHOD_INVALID — callers must guard with is_user.
+        """
+        dialogs: list[dict[str, Any]] = []
         gen = self._client.get_dialogs()
         if gen is None:
             return dialogs
         async for dialog in gen:
             chat = dialog.chat
             permissions = getattr(chat, "permissions", None)
+            title = chat.title or ""
+            if not title:
+                first = getattr(chat, "first_name", "") or ""
+                last = getattr(chat, "last_name", "") or ""
+                title = f"{first} {last}".strip()
             dialogs.append(
                 {
                     "chat_id": chat.id,
-                    "title": chat.title
-                    or f"{chat.first_name or ''} {chat.last_name or ''}".strip(),
+                    "title": title,
                     "type": str(chat.type).split(".")[-1].lower()
                     if chat.type
                     else "unknown",
                     "members": getattr(chat, "member_count", 0) or 0,
-                    "can_read": permissions.can_send_messages if permissions else False,
+                    "can_read": True,
                     "can_write": permissions.can_send_messages
                     if permissions
                     else False,
@@ -379,12 +433,14 @@ class TelegramClient:
         For full history the caller must paginate.
         """
         messages: list[Any] = []
-        gen = self._client.get_chat_history(
+        kwargs: dict[str, Any] = dict(
             chat_id=chat_id,
             limit=limit,
             offset_id=offset_id,
-            offset_date=offset_date,
         )
+        if offset_date is not None:
+            kwargs["offset_date"] = offset_date
+        gen = self._client.get_chat_history(**kwargs)
         if gen is not None:
             async for msg in gen:
                 messages.append(msg)

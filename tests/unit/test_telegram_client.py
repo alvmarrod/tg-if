@@ -19,7 +19,6 @@ def _async_gen(items: list[Any]) -> AsyncMock:
 @pytest.fixture
 def raw_client() -> MagicMock:
     client = MagicMock()
-    client.get_dialogs = MagicMock()
     client.get_chat_history = MagicMock()
     client.download_media = AsyncMock()
     return client
@@ -42,47 +41,52 @@ def telegram_client(raw_client: MagicMock, bot_config: BotConfig) -> TelegramCli
     return tc
 
 
-class MockChat:
-    def __init__(self, chat_id: int, title: str, chat_type: str) -> None:
-        self.id = chat_id
-        self.title = title
-        self.first_name = None
-        self.last_name = None
-        self.type = MagicMock()
-        self.type.value = chat_type.upper()
-        self.member_count = 42
-        self.permissions = MagicMock()
-        self.permissions.can_send_messages = True
-
-
-def _make_dialog(chat_id: int, title: str, chat_type: str) -> MagicMock:
-    dialog = MagicMock()
-    dialog.chat = MockChat(chat_id, title, chat_type)
-    return dialog
+def _make_chat(chat_id: int, title: str, chat_type_str: str) -> MagicMock:
+    chat = MagicMock()
+    chat.id = chat_id
+    chat.title = title
+    chat.first_name = None
+    chat.last_name = None
+    chat.type = f"ChatType.{chat_type_str.upper()}"
+    chat.member_count = 42
+    chat.permissions = MagicMock()
+    chat.permissions.can_send_messages = True
+    return chat
 
 
 class TestTelegramClientExport:
-    async def test_get_dialogs_returns_list(
+    async def test_known_chats_returns_registered(
         self, telegram_client: TelegramClient, raw_client: MagicMock
     ) -> None:
-        raw_client.get_dialogs.return_value = _async_gen(
-            [
-                _make_dialog(-100123, "Group A", "group"),
-                _make_dialog(456, "User B", "private"),
-            ]
-        )
-        result = await telegram_client.get_dialogs()
+        chat_a = _make_chat(-100123, "Group A", "supergroup")
+        chat_b = _make_chat(456, "User B", "private")
+        telegram_client._register_chat(chat_a)
+        telegram_client._register_chat(chat_b)
+
+        result = telegram_client.known_chats
         assert len(result) == 2
         assert result[0]["chat_id"] == -100123
         assert result[0]["title"] == "Group A"
+        assert result[0]["type"] == "supergroup"
+        assert result[0]["can_read"] is True
         assert result[1]["chat_id"] == 456
+        assert result[1]["title"] == "User B"
+        assert result[1]["can_read"] is True
 
-    async def test_get_dialogs_empty(
+    async def test_known_chats_empty_by_default(
         self, telegram_client: TelegramClient, raw_client: MagicMock
     ) -> None:
-        raw_client.get_dialogs.return_value = _async_gen([])
-        result = await telegram_client.get_dialogs()
-        assert result == []
+        assert telegram_client.known_chats == []
+
+    async def test_known_chats_updates_existing(
+        self, telegram_client: TelegramClient, raw_client: MagicMock
+    ) -> None:
+        chat = _make_chat(100, "Old Name", "private")
+        telegram_client._register_chat(chat)
+        chat.title = "New Name"
+        telegram_client._register_chat(chat)
+        assert len(telegram_client.known_chats) == 1
+        assert telegram_client.known_chats[0]["title"] == "New Name"
 
     async def test_get_chat_history_returns_messages(
         self, telegram_client: TelegramClient, raw_client: MagicMock
@@ -116,6 +120,30 @@ class TestTelegramClientExport:
         raw_client.download_media.assert_awaited_once_with(
             message=msg, file_name="/data/exports/media/photo/abc.jpg"
         )
+
+    async def test_discover_chats_returns_parsed_dialogs(
+        self, telegram_client: TelegramClient, raw_client: MagicMock
+    ) -> None:
+        chat_a = _make_chat(-100123, "Group A", "supergroup")
+        chat_b = _make_chat(456, "User B", "private")
+        d_a = MagicMock()
+        d_a.chat = chat_a
+        d_b = MagicMock()
+        d_b.chat = chat_b
+        raw_client.get_dialogs = MagicMock()
+        raw_client.get_dialogs.return_value = _async_gen([d_a, d_b])
+        result = await telegram_client.discover_chats()
+        assert len(result) == 2
+        assert result[0]["chat_id"] == -100123
+        assert result[1]["chat_id"] == 456
+
+    async def test_discover_chats_empty(
+        self, telegram_client: TelegramClient, raw_client: MagicMock
+    ) -> None:
+        raw_client.get_dialogs = MagicMock()
+        raw_client.get_dialogs.return_value = _async_gen([])
+        result = await telegram_client.discover_chats()
+        assert result == []
 
     async def test_download_media_returns_none_on_failure(
         self, telegram_client: TelegramClient, raw_client: MagicMock

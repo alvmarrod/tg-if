@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from functools import partial
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -27,6 +28,7 @@ from infrastructure import metrics_exporter as prom
 from infrastructure.media.storage import DiskStorage
 from infrastructure.sqlite import UploadRegistry
 from infrastructure.telegram.client import TelegramClient
+from infrastructure.telegram.handlers import parse_session_path
 
 
 logger = structlog.get_logger()
@@ -65,6 +67,25 @@ class ReceiverService:
             )
             clients[bot_cfg.name] = client
         self._clients = clients
+        self._user_client: TelegramClient | None = None
+
+        if config.user_account is not None:
+            name, workdir = parse_session_path(config.user_account.session_file)
+            session_path = Path(workdir) / f"{name}.session"
+            if not session_path.exists():
+                logger.warning(
+                    "user session file not found, skipping user client",
+                    path=str(session_path),
+                    hint="run tools/auth_user.py to create the session interactively",
+                )
+            else:
+                user_cfg = BotConfig(
+                    name=config.user_account.name,
+                    api_id=config.user_account.api_id,
+                    api_hash=config.user_account.api_hash,
+                    session_file=config.user_account.session_file,
+                )
+                self._user_client = TelegramClient(user_cfg)
 
         self._cache = DiskStorage(config.media_cache_path)
         self._media_config = MediaConfigManager(config.media_config_path)
@@ -86,6 +107,7 @@ class ReceiverService:
                 config=config,
                 clients=self._clients,
                 admin_client=admin_client,
+                user_client=self._user_client,
             )
             cmd_handler = AdminCommandHandler(
                 admin_client=admin_client,
@@ -239,6 +261,9 @@ class ReceiverService:
 
         for client in self._clients.values():
             await client.start()
+
+        if self._user_client is not None:
+            await self._user_client.start()
 
         self._upload_registry.connect()
 

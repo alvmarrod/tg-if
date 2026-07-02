@@ -1009,21 +1009,63 @@ class AdminCommandHandler:
         all_chats: list[ChatInfo] = []
         seen_ids: set[int] = set()
 
+        if (
+            self._chat_exporter is not None
+            and getattr(self._chat_exporter, "_user_client", None) is not None
+        ):
+            user_client = self._chat_exporter._user_client
+            assert user_client is not None  # narrow type for mypy
+            try:
+                user_dialogs = await user_client.discover_chats()
+                for d in user_dialogs:
+                    if d["chat_id"] in seen_ids:
+                        continue
+                    seen_ids.add(d["chat_id"])
+                    try:
+                        chat_type = ChatType(d["type"])
+                    except ValueError:
+                        logger.warning(
+                            "Unknown chat type",
+                            type=d["type"],
+                            chat_id=d["chat_id"],
+                        )
+                        continue
+                    ci = ChatInfo(
+                        chat_id=d["chat_id"],
+                        title=d["title"],
+                        chat_type=chat_type,
+                        members=d["members"],
+                        can_read=True,
+                        can_write=d["can_write"],
+                        exportable=True,
+                        bot_id="__user__",
+                    )
+                    all_chats.append(ci)
+            except Exception:
+                logger.warning("Failed to get user dialogs", exc_info=True)
+
         for bot_name, client in self._clients.items():
             try:
                 dialogs = await client.get_dialogs()
             except Exception:
-                logger.warning("Failed to get dialogs", bot=bot_name, exc_info=True)
+                logger.warning("Failed to get known chats", bot=bot_name, exc_info=True)
                 continue
             for d in dialogs:
                 if d["chat_id"] in seen_ids:
                     continue
                 seen_ids.add(d["chat_id"])
+                try:
+                    chat_type = ChatType(d["type"])
+                except ValueError:
+                    logger.warning(
+                        "Unknown chat type", type=d["type"], chat_id=d["chat_id"]
+                    )
+                    continue
                 # TODO: deferred — add --search filter for large chat lists
                 ci = ChatInfo(
                     chat_id=d["chat_id"],
                     title=d["title"],
-                    chat_type=ChatType(d["type"]),
+                    chat_type=chat_type,
                     members=d["members"],
                     can_read=d["can_read"],
                     can_write=d["can_write"],
@@ -1116,6 +1158,7 @@ class AdminCommandHandler:
         asyncio.ensure_future(
             self._chat_exporter.export_chat(
                 chat_id=target_chat_id,
+                notify_chat_id=chat_id,
                 since=since,
                 parallelism=parallelism,
             )

@@ -41,6 +41,13 @@ class AdminBotConfig(BaseModel):
     )
 
 
+class UserAccountConfig(BaseModel):
+    name: str = "__user__"
+    api_id: int
+    api_hash: str
+    session_file: str = "sessions/user_session.session"
+
+
 class AppConfig(BaseModel):
     log_level: str = Field(default="INFO")
     api_side_port: int = Field(default=8080)
@@ -75,6 +82,7 @@ class AppConfig(BaseModel):
     broker: BrokerConfig = Field(default_factory=BrokerConfig)
     bots: list[BotConfig] = Field(default_factory=list)
     admin: AdminBotConfig | None = None
+    user_account: UserAccountConfig | None = None
 
 
 class ConfigLoader:
@@ -101,6 +109,7 @@ class ConfigLoader:
 
         bots: list[BotConfig] = []
         admin_config: AdminBotConfig | None = None
+        user_config: UserAccountConfig | None = None
         bots_file = Path(bots_path)
         if bots_file.exists():
             raw = json.loads(bots_file.read_text())
@@ -109,6 +118,9 @@ class ConfigLoader:
             admin_data = raw.get("admin")
             if admin_data:
                 admin_config = AdminBotConfig.model_validate(admin_data)
+            user_data = raw.get("user")
+            if user_data:
+                user_config = UserAccountConfig.model_validate(user_data)
         else:
             msg = f"Bot configuration file not found: {bots_file}"
             raise FileNotFoundError(msg)
@@ -132,4 +144,5 @@ class ConfigLoader:
             broker=broker,
             bots=bots,
             admin=admin_config,
+            user_account=user_config,
         )

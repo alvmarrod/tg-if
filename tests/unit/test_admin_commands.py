@@ -963,6 +963,38 @@ class TestExportAdminCommands:
         await handler.handle(event, _private_context())
         admin.send_text.assert_not_called()
 
+    async def test_chats_skips_unknown_type(self) -> None:
+        admin = MockClient()
+        client = self._make_export_client()
+        client.get_dialogs.return_value = [
+            {
+                "chat_id": -100123,
+                "title": "Valid Group",
+                "type": "supergroup",
+                "members": 42,
+                "can_read": True,
+                "can_write": True,
+            },
+            {
+                "chat_id": -100456,
+                "title": "Unknown Type Chat",
+                "type": "some_new_type",
+                "members": 10,
+                "can_read": True,
+                "can_write": False,
+            },
+        ]
+        handler = self._make_handler_with_exporter(admin, {"bot": client})
+        await handler.handle(_make_event("chats"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        text = args[0][1]
+        # Only the valid chat should appear
+        assert "Valid Group" in text
+        assert "Unknown Type Chat" not in text
+        assert "1 chat" in text  # deduped count
+
     async def test_export_missing_chat_id(self) -> None:
         admin = MockClient()
         handler = self._make_handler_with_exporter(admin)
@@ -994,6 +1026,7 @@ class TestExportAdminCommands:
         assert exporter.export_chat.call_count >= 1
         _, kwargs = exporter.export_chat.call_args
         assert kwargs["chat_id"] == -100123
+        assert kwargs["notify_chat_id"] == 999
         assert kwargs["since"] == 500
         assert kwargs["parallelism"] == 1
 
@@ -1007,6 +1040,7 @@ class TestExportAdminCommands:
         )
         assert exporter.export_chat.call_count >= 1
         _, kwargs = exporter.export_chat.call_args
+        assert kwargs["notify_chat_id"] == 999
         assert kwargs["since"] == "2026-01-01"
 
     async def test_export_with_parallelism(self) -> None:
@@ -1019,6 +1053,7 @@ class TestExportAdminCommands:
         )
         assert exporter.export_chat.call_count >= 1
         _, kwargs = exporter.export_chat.call_args
+        assert kwargs["notify_chat_id"] == 999
         assert kwargs["parallelism"] == 5
 
     async def test_export_rejects_running(self) -> None:

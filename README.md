@@ -61,6 +61,7 @@ Telegram MTProto gateway service that receives events via Pyrofork, routes them 
 - **Delete messages**: `delete_message` response type for removing messages via Pyrofork `delete_messages`
 - **Edited message handling**: Subscribers receive `edited_message` events with full message context when a user edits a previously sent message (text, command, or media)
 - **Enriched event envelopes**: Subscribers receive `message_id`, `text`, `caption`, `command_args`, `from_user`, and `reply_to_message_id` on every incoming event
+- **Chat export**: On-demand full chat history export to filesystem via `/export` admin command. Requires a pre-authenticated user MTProto session — see `doc/chat_export.md`
 
 ## 🚀 Configuration
 
@@ -89,6 +90,12 @@ python main.py
 ```
 
 On first run, bots configured with `bot_token` authenticate automatically (preferred). Bots without a token require interactive login (phone number + code). Sessions are saved in `sessions/` for subsequent runs.
+
+For chat export the service needs a **user MTProto session** (not a bot). Create it once interactively before deploying:
+
+```bash
+python tools/auth_user.py
+```
 
 ## 🧠 Broker Topology
 
@@ -181,6 +188,7 @@ tg-if/
 │   ├── setup_esp.md
 │   ├── subscriber_interface.md
 │   ├── subscriber_media_interface_esp.md    # Upload protocol spec (Español)
+│   ├── chat_export.md           # Chat export design doc
 │   └── subsystems/
 │
 ├── src/
@@ -196,7 +204,8 @@ tg-if/
 │   │   ├── event_dispatcher.py    # Rules engine and routing logic
 │   │   ├── response_consumer.py   # Consumes outgoing responses
 │   │   ├── media_config.py        # Media config rule manager
-│   │   └── media_downloader.py    # Eager media downloader
+│   │   ├── media_downloader.py    # Eager media downloader
+│   │   ├── chat_exporter.py      # Chat export engine
 │   │
 │   ├── domain/                # Domain models
 │   │   ├── __init__.py
@@ -229,6 +238,9 @@ tg-if/
     ├── unit/                    # 20 unit test files
     ├── integration/             # 4 integration test files (opt-in, requires Docker)
     └── fixtures/                # Sample events for testing
+
+└── tools/
+    └── auth_user.py             # Interactive user session pre-auth helper
 ```
 
 ## 🏥 Health Checks

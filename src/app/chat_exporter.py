@@ -169,10 +169,12 @@ class ChatExportEngine:
         config: AppConfig,
         clients: Mapping[str, TelegramClient],
         admin_client: TelegramClient | None = None,
+        user_client: TelegramClient | None = None,
     ) -> None:
         self._export_path = Path(config.export_storage_path)
         self._clients = clients
         self._admin = admin_client
+        self._user_client = user_client
 
         self._lock = asyncio.Lock()
         self._paused = asyncio.Event()
@@ -212,10 +214,14 @@ class ChatExportEngine:
     async def export_chat(
         self,
         chat_id: int,
+        notify_chat_id: int | None = None,
         since: str | int | None = None,
         parallelism: int = 1,
     ) -> None:
         """Run a full chat export.
+
+        chat_id is the target chat to export. notify_chat_id is where
+        progress messages are sent (the admin's private chat).
 
         Acquires the export lock. Returns early if:
         - Lock is held (another export running)
@@ -242,7 +248,11 @@ class ChatExportEngine:
             try:
                 client = await self._resolve_client(chat_id)
                 if client is None:
-                    raise RuntimeError(f"No bot client can access chat {chat_id}")
+                    raise RuntimeError(
+                        f"No bot client can access chat {chat_id}. "
+                        f"Make sure at least one bot has received a message "
+                        f"in this chat first."
+                    )
 
                 since_msg_id: int | None = None
                 since_date: datetime | None = None
@@ -260,7 +270,9 @@ class ChatExportEngine:
 
                 bot_name = self._find_bot_name(client)
 
-                await self._send_progress_message(chat_id)
+                await self._send_progress_message(
+                    notify_chat_id if notify_chat_id is not None else chat_id
+                )
 
                 total = await self._count_messages(
                     client, chat_id, since_msg_id, since_date
@@ -297,23 +309,25 @@ class ChatExportEngine:
             finally:
                 self._progress.state = ExportState.IDLE
 
-    async def _find_first_client_by_dialogs(
-        self, chat_id: int
-    ) -> TelegramClient | None:
-        """Try to find a client that has access to this chat by scanning
-        its dialogs. Used as fallback if direct get_chat_history fails."""
-        for client in self._clients.values():
-            try:
-                dialogs = await client.get_dialogs()
-                for d in dialogs:
-                    if d["chat_id"] == chat_id:
-                        return client
-            except Exception:
-                continue
-        return None
-
     async def _resolve_client(self, chat_id: int) -> TelegramClient | None:
-        """Find a bot client that can access the chat."""
+        """Find a client that can access the chat.
+
+        Tries the user_client first (has full access via MTProto),
+        then falls back to bot clients' known_chats registry,
+        and finally probes bot get_chat_history as a last resort
+        (works in tests, fails silently in production for bots).
+        """
+        if self._user_client is not None:
+            try:
+                msgs = await self._user_client.get_chat_history(chat_id, limit=1)
+                if msgs:
+                    return self._user_client
+            except Exception:
+                pass
+        for client in self._clients.values():
+            for d in client.known_chats:
+                if d["chat_id"] == chat_id:
+                    return client
         for client in self._clients.values():
             try:
                 msgs = await client.get_chat_history(chat_id, limit=1)
@@ -321,7 +335,7 @@ class ChatExportEngine:
                     return client
             except Exception:
                 continue
-        return await self._find_first_client_by_dialogs(chat_id)
+        return None
 
     def _find_bot_name(self, client: TelegramClient) -> str:
         for name, c in self._clients.items():

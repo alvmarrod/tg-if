@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -244,11 +245,54 @@ class TestChatExportEngine:
         engine._lock = MagicMock()
         engine._lock.locked.return_value = True
         with pytest.raises(RuntimeError, match="already in progress"):
-            await engine.export_chat(chat_id=-100123)
+            await engine.export_chat(chat_id=-100123, notify_chat_id=999)
 
     async def test_export_no_client(self, engine: ChatExportEngine) -> None:
         with pytest.raises(RuntimeError, match="No bot client can access"):
-            await engine.export_chat(chat_id=-100123)
+            await engine.export_chat(chat_id=-100123, notify_chat_id=999)
+
+    async def test_resolve_client_user_first(self, engine: ChatExportEngine) -> None:
+        user_client = MagicMock()
+        user_client.bot_id = "__user__"
+
+        async def _get_chat_history(
+            chat_id: int,
+            limit: int = 0,
+            offset_id: int = 0,
+            offset_date: Any = None,
+        ) -> list[MagicMock]:
+            return [MagicMock()]
+
+        user_client.get_chat_history = _get_chat_history
+        engine._user_client = user_client
+        result = await engine._resolve_client(-100123)
+        assert result is user_client
+
+    async def test_resolve_client_fallback_to_known_chats(
+        self, engine: ChatExportEngine
+    ) -> None:
+        user_client = MagicMock()
+        user_client.bot_id = "__user__"
+
+        async def _get_chat_history(
+            chat_id: int,
+            limit: int = 0,
+            offset_id: int = 0,
+            offset_date: Any = None,
+        ) -> list[MagicMock]:
+            raise RuntimeError("user client probe failed")
+
+        user_client.get_chat_history = _get_chat_history
+        engine._user_client = user_client
+
+        bot_client = MagicMock()
+        bot_client.known_chats = [
+            {"chat_id": -100123, "title": "Target", "type": "supergroup"},
+        ]
+        engine._clients = {"bot_a": bot_client}
+
+        result = await engine._resolve_client(-100123)
+        assert result is bot_client
 
     def test_find_bot_name(self) -> None:
         config = _make_config()
