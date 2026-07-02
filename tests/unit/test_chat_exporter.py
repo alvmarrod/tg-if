@@ -248,10 +248,12 @@ class TestChatExportEngine:
             await engine.export_chat(chat_id=-100123, notify_chat_id=999)
 
     async def test_export_no_client(self, engine: ChatExportEngine) -> None:
-        with pytest.raises(RuntimeError, match="No bot client can access"):
+        with pytest.raises(RuntimeError, match="Chat export requires a user account"):
             await engine.export_chat(chat_id=-100123, notify_chat_id=999)
 
-    async def test_resolve_client_user_first(self, engine: ChatExportEngine) -> None:
+    async def test_user_client_for_export_success(
+        self, engine: ChatExportEngine
+    ) -> None:
         user_client = MagicMock()
         user_client.bot_id = "__user__"
 
@@ -265,26 +267,18 @@ class TestChatExportEngine:
 
         user_client.get_chat_history = _get_chat_history
         engine._user_client = user_client
-        result = await engine._resolve_client(-100123)
+        result = await engine._user_client_for_export(-100123)
         assert result is user_client
 
-    async def test_resolve_client_fallback_to_known_chats(
+    async def test_user_client_for_export_missing(
         self, engine: ChatExportEngine
     ) -> None:
-        user_client = MagicMock()
-        user_client.bot_id = "__user__"
+        with pytest.raises(RuntimeError, match="Chat export requires a user account"):
+            await engine._user_client_for_export(-100123)
 
-        async def _get_chat_history(
-            chat_id: int,
-            limit: int = 0,
-            offset_id: int = 0,
-            offset_date: Any = None,
-        ) -> list[MagicMock]:
-            raise RuntimeError("user client probe failed")
-
-        user_client.get_chat_history = _get_chat_history
-        engine._user_client = user_client
-
+    async def test_resolve_client_via_known_chats(
+        self, engine: ChatExportEngine
+    ) -> None:
         bot_client = MagicMock()
         bot_client.known_chats = [
             {"chat_id": -100123, "title": "Target", "type": "supergroup"},
