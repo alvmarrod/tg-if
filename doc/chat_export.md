@@ -42,11 +42,16 @@ Triggers a full history export for the given chat.
 **Control buttons:**
 The progress message includes an inline keyboard:
 
-- ⏸️ **Pause** — suspends iteration. Download in-flight may finish but no new pages are fetched.
+- ⏸️ **Pause** — suspends iteration. Download in-flight may finish but no new pages are fetched. Saves a checkpoint file.
 - ▶️ **Resume** — continues a paused export.
 - ⏹️ **Cancel** — aborts the export. Any export already written to disk remains.
 
-Pause/resume state is in-memory only — not persisted across process restarts.
+**Cross-process resume:**
+Pause state is persisted to a checkpoint file at `{export_dir}/{chat_id}/_export_state.json`.
+After a restart, run `/export <chat_id>` again — the engine detects the checkpoint and
+restores the export in PAUSED state. Press ▶️ **Resume** to continue from where you left off.
+On completion or cancel the checkpoint is automatically deleted. Stale checkpoints for
+a different chat are reaped on new export start.
 
 **Progress:**
 The bot sends a single progress message and edits it in-place as the export progresses:
@@ -243,6 +248,5 @@ The `files` array lists every monthly JSONL file produced by the export. A consu
 - Multiple media versions (edits overwrite the latest)
 - Automatic periodic exports
 - Compression of export files
-- Resume interrupted exports across process restarts
 - `--max-messages` limit flag
 - `/chats --search` filter

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,7 +15,7 @@ from app.chat_exporter import (
     _monthly_filename,
     _serialize_message,
 )
-from domain.entities import ExportState
+from domain.entities import ExportProgress, ExportState
 from infrastructure.config import AppConfig
 
 
@@ -285,3 +286,116 @@ class TestChatExportEngine:
         engine = ChatExportEngine(config=config, clients=clients)
         assert engine._find_bot_name(client_a) == "bot_a"
         assert engine._find_bot_name(MagicMock()) == "unknown"
+
+    def test_checkpoint_path(self, tmp_path: Path) -> None:
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        path = engine._checkpoint_path(-100123)
+        assert str(path) == str(tmp_path / "-100123" / "_export_state.json")
+
+    def test_checkpoint_none_when_missing(self, tmp_path: Path) -> None:
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        assert engine._load_checkpoint(-100123) is None
+
+    def test_checkpoint_save_load_round_trip(self, tmp_path: Path) -> None:
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        engine._progress = ExportProgress(
+            state=ExportState.PAUSED,
+            current_chat_id=-100123,
+            processed=42,
+            media_count=5,
+            media_bytes=1000,
+            start_time=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        )
+        engine._progress_msg_id = 99
+        engine._progress_chat_id = 888
+        engine._export_offset_id = 500
+        engine._export_since_msg_id = 10
+        engine._export_since_date = None
+        engine._export_bot_name = "testbot"
+        engine._seen_file_ids = {"a", "b", "c"}
+
+        engine._save_checkpoint()
+
+        # Load into fresh engine
+        fresh = ChatExportEngine(config=config, clients={})
+        cp = fresh._load_checkpoint(-100123)
+        assert cp is not None
+        assert cp.chat_id == -100123
+        assert cp.offset_id == 500
+        assert cp.processed == 42
+        assert cp.media_count == 5
+        assert cp.media_bytes == 1000
+        assert cp.progress_msg_id == 99
+        assert cp.progress_chat_id == 888
+        assert cp.since_msg_id == 10
+        assert cp.since_date is None
+        assert cp.bot_name == "testbot"
+        assert sorted(cp.seen_file_ids) == ["a", "b", "c"]
+        assert cp.saved_at is not None
+
+    def test_checkpoint_delete_removes_file(self, tmp_path: Path) -> None:
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        engine._progress = ExportProgress(
+            state=ExportState.PAUSED,
+            current_chat_id=-100123,
+        )
+        engine._save_checkpoint()
+        assert engine._checkpoint_path(-100123).exists()
+
+        engine._delete_checkpoint(-100123)
+        assert not engine._checkpoint_path(-100123).exists()
+
+    def test_pause_does_not_save_checkpoint_directly(self, tmp_path: Path) -> None:
+        """Checkpoint is saved at page boundary in _export_messages, not in pause()."""
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        engine._progress.state = ExportState.RUNNING
+        engine._progress.current_chat_id = -100123
+        engine.pause()
+
+        assert not engine._checkpoint_path(-100123).exists()
+        assert engine.state == ExportState.PAUSED
+
+    def test_checkpoint_saved_at_page_boundary(self, tmp_path: Path) -> None:
+        """Simulate page boundary: state PAUSED + offset updated → checkpoint saved."""
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        engine._progress = ExportProgress(
+            state=ExportState.PAUSED,
+            current_chat_id=-100123,
+        )
+        engine._export_offset_id = 500
+        engine._progress.processed = 42
+        engine._save_checkpoint()
+
+        assert engine._checkpoint_path(-100123).exists()
+        cp = engine._load_checkpoint(-100123)
+        assert cp is not None
+        assert cp.offset_id == 500
+        assert cp.processed == 42
+
+    def test_stale_checkpoint_reaped_on_new_export(self, tmp_path: Path) -> None:
+        """A checkpoint for chat A is deleted when starting export for chat B."""
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        engine._progress = ExportProgress(
+            state=ExportState.PAUSED,
+            current_chat_id=-100111,
+        )
+        engine._export_offset_id = 10
+        engine._save_checkpoint()
+        stale_path = engine._checkpoint_path(-100111)
+        assert stale_path.exists()
+
+        # Simulate export_chat reaping logic for target -100123
+        cp = engine._load_checkpoint(-100123)
+        assert cp is None  # no checkpoint for target
+        cp = engine._load_checkpoint(-100111)
+        assert cp is not None and cp.chat_id != -100123
+        # This is what export_chat does when cp.chat_id != chat_id
+        engine._delete_checkpoint(cp.chat_id)
+        assert not stale_path.exists()

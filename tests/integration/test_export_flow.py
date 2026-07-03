@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.chat_exporter import ChatExportEngine
+from domain.entities import ExportCheckpoint, ExportState
 from infrastructure.config import AppConfig
 
 CHAT_ID = -100123
@@ -372,3 +373,47 @@ class TestExportFlow:
         lines = monthly.read_text().strip().split("\n")
         assert len(lines) == 2
         assert json.loads(lines[0])["message_id"] == 1
+
+    async def test_resume_from_checkpoint_across_restarts(
+        self, export_dir: Path, config: AppConfig, admin_client: MagicMock
+    ) -> None:
+        """Pause → process restart → /export → resume completes without duplicates."""
+        page1 = [_make_msg(i) for i in range(1, 51)]
+        page2 = [_make_msg(i) for i in range(51, 101)]
+
+        cp = ExportCheckpoint(
+            chat_id=CHAT_ID,
+            offset_id=50,
+            seen_file_ids=[],
+            processed=50,
+            bot_name=BOT_NAME,
+        )
+        cp_path = export_dir / str(CHAT_ID) / "_export_state.json"
+        cp_path.parent.mkdir(parents=True, exist_ok=True)
+        cp_path.write_text(cp.model_dump_json(indent=2), encoding="utf-8")
+
+        client = _page_sequence([page2, []], [page2, []], probe=page1)
+        engine = _make_engine(config, client, admin_client, user_client=client)
+
+        async def _delayed_resume() -> None:
+            import asyncio
+
+            await asyncio.sleep(0.05)
+            assert engine.state == ExportState.PAUSED, (
+                f"Expected PAUSED, got {engine.state}"
+            )
+            engine.resume()
+
+        import asyncio
+
+        resume_task = asyncio.create_task(_delayed_resume())
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
+        await resume_task
+
+        monthly = export_dir / str(CHAT_ID) / "2026-06.json"
+        lines = monthly.read_text().strip().split("\n")
+        assert len(lines) == 50
+        ids = [json.loads(line)["message_id"] for line in lines]
+        assert ids == list(range(51, 101))
+
+        assert not cp_path.exists(), "Checkpoint should be deleted on completion"

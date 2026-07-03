@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Disk-persisted export checkpoints (`_export_state.json`): pause saves state (offset_id,
+  seen_file_ids, progress counts, progress message ID), `/export <chat_id>` after restart
+  detects checkpoint and restores in PAUSED state for cross-process resume
+- `ExportCheckpoint` Pydantic model with all serializable export state fields
+- Checkpoint lifecycle: saved on pause, deleted on completion/cancel/error, stale checkpoints
+  for different chat reaped on new export start
+- `_export_messages` gains `start_offset_id` parameter for resume from arbitrary offset
+- `doc/chat_export.md`: cross-process resume documented, removed out-of-scope note
+
 ## [0.4.0] - 2026-07-02
 
 ### Added
