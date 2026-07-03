@@ -11,7 +11,7 @@ from typing import Any
 
 import structlog
 
-from domain.entities import ExportProgress, ExportState
+from domain.entities import ExportCheckpoint, ExportProgress, ExportState
 from infrastructure.config import AppConfig
 from infrastructure.telegram.client import TelegramClient
 
@@ -181,6 +181,59 @@ class ChatExportEngine:
 
         self._seen_file_ids: set[str] = set()
 
+        self._export_offset_id: int = 0
+        self._export_since_msg_id: int | None = None
+        self._export_since_date: datetime | None = None
+        self._export_bot_name: str = ""
+
+    def _checkpoint_dir(self, chat_id: int) -> Path:
+        return self._export_path / str(chat_id)
+
+    def _checkpoint_path(self, chat_id: int) -> Path:
+        return self._checkpoint_dir(chat_id) / "_export_state.json"
+
+    def _save_checkpoint(self) -> None:
+        if self._progress.current_chat_id is None:
+            return
+        chat_id = self._progress.current_chat_id
+        cp = ExportCheckpoint(
+            chat_id=chat_id,
+            offset_id=self._export_offset_id,
+            seen_file_ids=sorted(self._seen_file_ids),
+            processed=self._progress.processed,
+            media_count=self._progress.media_count,
+            media_bytes=self._progress.media_bytes,
+            progress_msg_id=self._progress_msg_id,
+            progress_chat_id=self._progress_chat_id,
+            since_msg_id=self._export_since_msg_id,
+            since_date=self._export_since_date.isoformat()
+            if isinstance(self._export_since_date, datetime)
+            else None,
+            bot_name=self._export_bot_name,
+        )
+        path = self._checkpoint_path(chat_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(cp.model_dump_json(indent=2), encoding="utf-8")
+
+    def _load_checkpoint(self, chat_id: int) -> ExportCheckpoint | None:
+        path = self._checkpoint_path(chat_id)
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return ExportCheckpoint(**data)
+        except Exception:
+            logger.warning("Failed to load checkpoint", chat_id=chat_id)
+            return None
+
+    def _delete_checkpoint(self, chat_id: int) -> None:
+        path = self._checkpoint_path(chat_id)
+        try:
+            if path.exists():
+                path.unlink()
+        except Exception:
+            logger.warning("Failed to delete checkpoint", chat_id=chat_id)
+
     @property
     def state(self) -> ExportState:
         return self._progress.state
@@ -221,47 +274,99 @@ class ChatExportEngine:
         - Lock is held (another export running)
         - No user client configured or cannot access the chat
         - Cancelled during export
+
+        On start, checks for a checkpoint file (``_export_state.json``).
+        If found and matches ``chat_id``, the export is restored from the
+        checkpoint in PAUSED state — the caller must resume it.  A stale
+        checkpoint for a different chat is deleted automatically.
         """
         if self._lock.locked():
             msg = "Export already in progress"
             logger.warning(msg)
             raise RuntimeError(msg)
 
+        # Reap stale checkpoint for a different chat
+        cp = self._load_checkpoint(chat_id)
+        if cp is not None and cp.chat_id != chat_id:
+            self._delete_checkpoint(cp.chat_id)
+            cp = None
+
+        restoring = cp is not None
+
         async with self._lock:
             self._cancelled.clear()
-            self._paused.set()
             self._seen_file_ids.clear()
-            self._progress = ExportProgress(
-                state=ExportState.RUNNING,
-                current_chat_id=chat_id,
-                start_time=datetime.now(timezone.utc),
-            )
             self._progress_msg_id = None
             self._progress_chat_id = None
+            self._export_offset_id = 0
+            self._export_since_msg_id = None
+            self._export_since_date = None
+            self._export_bot_name = ""
+
+            if restoring:
+                assert cp is not None  # mypy narrowing
+                self._seen_file_ids = set(cp.seen_file_ids)
+                self._progress = ExportProgress(
+                    state=ExportState.PAUSED,
+                    current_chat_id=cp.chat_id,
+                    processed=cp.processed,
+                    media_count=cp.media_count,
+                    media_bytes=cp.media_bytes,
+                    start_time=datetime.now(timezone.utc),
+                )
+                self._progress_msg_id = cp.progress_msg_id
+                self._progress_chat_id = cp.progress_chat_id
+                self._paused.clear()  # start paused, block until Resume
+                start_offset_id = cp.offset_id
+                since_msg_id = cp.since_msg_id
+                since_date = (
+                    datetime.fromisoformat(cp.since_date) if cp.since_date else None
+                )
+                bot_name = cp.bot_name
+                self._export_offset_id = cp.offset_id
+                self._export_since_msg_id = cp.since_msg_id
+                self._export_since_date = since_date
+                self._export_bot_name = bot_name
+            else:
+                self._paused.set()
+                self._progress = ExportProgress(
+                    state=ExportState.RUNNING,
+                    current_chat_id=chat_id,
+                    start_time=datetime.now(timezone.utc),
+                )
+                start_offset_id = 0
+                since_msg_id = None
+                since_date = None
+                bot_name = ""
 
             try:
                 client = await self._user_client_for_export(chat_id)
                 logger.info("export access verified", chat_id=chat_id)
 
-                since_msg_id: int | None = None
-                since_date: datetime | None = None
-                if isinstance(since, int):
-                    since_msg_id = since
-                elif isinstance(since, str):
-                    if since.isdigit() or (
-                        since.startswith("-") and since[1:].isdigit()
-                    ):
-                        since_msg_id = int(since)
-                    else:
-                        since_date = datetime.fromisoformat(since).replace(
-                            tzinfo=timezone.utc
-                        )
+                if not restoring:
+                    if isinstance(since, int):
+                        since_msg_id = since
+                    elif isinstance(since, str):
+                        if since.isdigit() or (
+                            since.startswith("-") and since[1:].isdigit()
+                        ):
+                            since_msg_id = int(since)
+                        else:
+                            since_date = datetime.fromisoformat(since).replace(
+                                tzinfo=timezone.utc
+                            )
 
-                bot_name = self._find_bot_name(client)
+                    bot_name = self._find_bot_name(client)
+                    self._export_since_msg_id = since_msg_id
+                    self._export_since_date = since_date
+                    self._export_bot_name = bot_name
 
-                await self._send_progress_message(
-                    notify_chat_id if notify_chat_id is not None else chat_id
-                )
+                if restoring and self._progress_msg_id is not None:
+                    await self._edit_progress_message("🔄 Resuming export (paused)...")
+                else:
+                    await self._send_progress_message(
+                        notify_chat_id if notify_chat_id is not None else chat_id
+                    )
 
                 self._progress.total = 0
 
@@ -272,10 +377,17 @@ class ChatExportEngine:
                     since=since_msg_id
                     or (since_date.isoformat() if since_date else None),
                     parallelism=parallelism,
+                    restored=restoring,
                 )
 
                 await self._export_messages(
-                    client, chat_id, bot_name, since_msg_id, since_date, parallelism
+                    client,
+                    chat_id,
+                    bot_name,
+                    since_msg_id,
+                    since_date,
+                    parallelism,
+                    start_offset_id=start_offset_id,
                 )
 
                 await self._write_summary(chat_id, bot_name, since_msg_id, since_date)
@@ -302,12 +414,15 @@ class ChatExportEngine:
                     processed=self._progress.processed,
                     media_count=self._progress.media_count,
                     duration_s=round(_export_elapsed, 1),
+                    restored=restoring,
                 )
+                self._delete_checkpoint(chat_id)
 
             except Exception:
                 logger.exception("Export failed", chat_id=chat_id)
                 self._progress.state = ExportState.IDLE
                 await self._edit_progress_message("❌ Export failed")
+                self._delete_checkpoint(chat_id)
                 raise
             finally:
                 self._progress.state = ExportState.IDLE
@@ -398,6 +513,7 @@ class ChatExportEngine:
         since_msg_id: int | None,
         since_date: datetime | None,
         parallelism: int,
+        start_offset_id: int = 0,
     ) -> None:
         """Second pass: iterate, serialize, download media, write JSONL."""
         export_dir = self._export_path / str(chat_id)
@@ -413,7 +529,7 @@ class ChatExportEngine:
         media_count = 0
         media_bytes = 0
 
-        offset_id = 0
+        offset_id = start_offset_id
         while True:
             if self._cancelled.is_set():
                 return
@@ -499,6 +615,10 @@ class ChatExportEngine:
                     )
 
             offset_id = page[-1].id
+            self._export_offset_id = offset_id
+
+            if self._progress.state == ExportState.PAUSED:
+                self._save_checkpoint()
 
         for fh in open_files.values():
             fh.close()

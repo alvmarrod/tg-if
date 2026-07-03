@@ -324,6 +324,23 @@ class ExportProgress(BaseModel):
         return round(self.processed / self.total * 100, 1)
 
 
+class ExportCheckpoint(BaseModel):
+    """Persistent snapshot of export state for cross-process resume."""
+
+    chat_id: int
+    offset_id: int = 0
+    seen_file_ids: list[str] = Field(default_factory=list)
+    processed: int = 0
+    media_count: int = 0
+    media_bytes: int = 0
+    progress_msg_id: int | None = None
+    progress_chat_id: int | None = None
+    since_msg_id: int | None = None
+    since_date: str | None = None
+    bot_name: str = ""
+    saved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class ChatInfo(BaseModel):
     """Information about a chat for the /chats command."""
 
