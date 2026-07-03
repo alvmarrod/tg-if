@@ -42,15 +42,17 @@ def _make_msg(
     msg.date = date or datetime(2026, 6, 15, tzinfo=timezone.utc)
     msg.edit_date = None
     msg.reply_to_message_id = reply_to
-    msg.forward_date = (
-        datetime(2026, 6, 14, tzinfo=timezone.utc) if has_forward else None
-    )
-    msg.forward_from = MagicMock() if has_forward else None
-    if msg.forward_from:
-        msg.forward_from.id = 999
-        msg.forward_from.first_name = "Forwarder"
-        msg.forward_from.last_name = None
-        msg.forward_from.username = "forwarder"
+    if has_forward:
+        fwd = MagicMock()
+        fwd.date = datetime(2026, 6, 14, tzinfo=timezone.utc)
+        fwd.sender_user = MagicMock()
+        fwd.sender_user.id = 999
+        fwd.sender_user.first_name = "Forwarder"
+        fwd.sender_user.last_name = None
+        fwd.sender_user.username = "forwarder"
+        msg.forward_origin = fwd
+    else:
+        msg.forward_origin = None
     msg.from_user = MagicMock()
     msg.from_user.id = 123
     msg.from_user.is_bot = False
