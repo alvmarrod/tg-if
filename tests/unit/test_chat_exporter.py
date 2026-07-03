@@ -399,3 +399,40 @@ class TestChatExportEngine:
         # This is what export_chat does when cp.chat_id != chat_id
         engine._delete_checkpoint(cp.chat_id)
         assert not stale_path.exists()
+
+    async def test_export_with_offset_passed_to_export_messages(
+        self, engine: ChatExportEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """offset param flows to _export_messages as start_offset_id."""
+        user_client = MagicMock()
+        user_client.bot_id = "__user__"
+        engine._user_client = user_client
+
+        async def _get_chat_history(
+            chat_id: int,
+            limit: int = 0,
+            offset_id: int = 0,
+            offset_date: Any = None,
+        ) -> list[MagicMock]:
+            return [MagicMock()]
+
+        user_client.get_chat_history = _get_chat_history
+
+        hook: dict[str, Any] = {}
+
+        async def _export_messages_hook(
+            client: Any,
+            chat_id: int,
+            bot_name: str,
+            since_msg_id: int | None,
+            since_date: Any,
+            parallelism: int,
+            start_offset_id: int = 0,
+        ) -> None:
+            hook["start_offset_id"] = start_offset_id
+
+        monkeypatch.setattr(engine, "_export_messages", _export_messages_hook)
+        monkeypatch.setattr(engine, "_write_summary", AsyncMock())
+
+        await engine.export_chat(chat_id=-100123, notify_chat_id=999, offset=500)
+        assert hook.get("start_offset_id") == 500

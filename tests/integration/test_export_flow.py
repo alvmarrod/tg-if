@@ -417,3 +417,43 @@ class TestExportFlow:
         assert ids == list(range(51, 101))
 
         assert not cp_path.exists(), "Checkpoint should be deleted on completion"
+
+    async def test_export_with_offset_skips_newer_messages(
+        self, export_dir: Path, config: AppConfig, admin_client: MagicMock
+    ) -> None:
+        """--offset <msg_id> skips paginated fetch for messages >= that ID."""
+        older = [_make_msg(i) for i in range(1, 51)]  # IDs 1-50
+        client = MagicMock()
+        client.bot_id = BOT_NAME
+        offset_ids: list[int] = []
+
+        async def _get_chat_history(
+            chat_id: int,
+            limit: int = 0,
+            offset_id: int = 0,
+            offset_date: Any = None,
+        ) -> list[MagicMock]:
+            offset_ids.append(offset_id)
+            if offset_id >= 50:
+                return []
+            return older
+
+        async def _download_media(
+            message: MagicMock, file_path: str, **kwargs: Any
+        ) -> str:
+            p = Path(file_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("mock")
+            return file_path
+
+        client.get_chat_history = _get_chat_history
+        client.download_media = AsyncMock(side_effect=_download_media)
+        engine = _make_engine(config, client, admin_client, user_client=client)
+
+        await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999, offset=50)
+
+        # First call is the probe (limit=1), second is the export fetch
+        assert 50 in offset_ids, f"offset_id=50 should be used, got {offset_ids}"
+
+        monthly = export_dir / str(CHAT_ID) / "2026-06.json"
+        assert not monthly.exists(), "No messages should be exported"

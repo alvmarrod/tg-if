@@ -1181,7 +1181,7 @@ class AdminCommandHandler:
         if not args:
             await self._admin.send_text(
                 chat_id,
-                "Usage: /export <chat_id> [--since <date|msg_id>] [--parallelism N]",
+                "Usage: /export <chat_id> [--since <date|msg_id>] [--offset <msg_id>] [--parallelism N]",
             )
             return
 
@@ -1217,6 +1217,17 @@ class AdminCommandHandler:
                 )
                 return
 
+        offset: int | None = None
+        offset_str = kwargs.get("offset")
+        if offset_str:
+            try:
+                offset = int(offset_str)
+            except ValueError:
+                await self._admin.send_text(
+                    chat_id, f"Invalid offset value: {offset_str}"
+                )
+                return
+
         if self._chat_exporter.state == ExportState.CANCELLED:
             self._chat_exporter._progress.state = ExportState.IDLE
 
@@ -1238,6 +1249,7 @@ class AdminCommandHandler:
                 notify_chat_id=chat_id,
                 since=since,
                 parallelism=parallelism,
+                offset=offset,
             )
         )
 
