@@ -30,8 +30,7 @@ def _make_msg(
     msg.date = date or datetime(2026, 6, 15, tzinfo=timezone.utc)
     msg.edit_date = None
     msg.reply_to_message_id = None
-    msg.forward_date = None
-    msg.forward_from = None
+    msg.forward_origin = None
     msg.from_user = MagicMock()
     msg.from_user.id = 123
     msg.from_user.is_bot = False

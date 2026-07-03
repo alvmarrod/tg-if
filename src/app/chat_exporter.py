@@ -132,18 +132,20 @@ def _serialize_message(msg: Any, media_rel_path: str | None = None) -> dict[str,
         out["reactions"] = reactions
 
     out["reply_to_message_id"] = msg.reply_to_message_id
-    out["is_forward"] = msg.forward_date is not None
+    fwd = msg.forward_origin
+    out["is_forward"] = fwd is not None
+    sender = getattr(fwd, "sender_user", None) if fwd else None
     out["forward_from"] = (
         {
-            "id": msg.forward_from.id,
-            "first_name": msg.forward_from.first_name,
-            "last_name": msg.forward_from.last_name,
-            "username": msg.forward_from.username,
+            "id": sender.id,
+            "first_name": sender.first_name,
+            "last_name": sender.last_name,
+            "username": sender.username,
         }
-        if msg.forward_from
+        if sender
         else None
     )
-    out["forward_date"] = msg.forward_date.isoformat() if msg.forward_date else None
+    out["forward_date"] = fwd.date.isoformat() if fwd and fwd.date else None
 
     return out
 
