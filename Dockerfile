@@ -14,7 +14,7 @@ FROM python:3.14-slim
 
 RUN pip install --no-cache-dir uv
 
-ARG APP_UID=1000
+ARG APP_UID=999
 RUN groupadd -g $APP_UID appuser && useradd -g appuser -u $APP_UID -m appuser
 
 WORKDIR /app

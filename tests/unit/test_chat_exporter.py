@@ -9,7 +9,6 @@ import pytest
 from app.chat_exporter import (
     ChatExportEngine,
     _extract_media_info,
-    _format_progress_bar,
     _media_extension,
     _media_subdir,
     _monthly_filename,
@@ -106,18 +105,6 @@ def _make_msg(
 
 
 class TestHelpers:
-    def test_format_progress_bar_empty(self) -> None:
-        bar = _format_progress_bar(0, 0)
-        assert bar == "⬜" * 20
-
-    def test_format_progress_bar_full(self) -> None:
-        bar = _format_progress_bar(100, 100)
-        assert bar == "⬛" * 20
-
-    def test_format_progress_bar_half(self) -> None:
-        bar = _format_progress_bar(50, 100)
-        assert bar == "⬛" * 10 + "⬜" * 10
-
     def test_monthly_filename(self) -> None:
         dt = datetime(2026, 7, 1, tzinfo=timezone.utc)
         assert _monthly_filename(dt) == "2026-07.json"

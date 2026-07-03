@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from collections.abc import Mapping
@@ -15,15 +16,6 @@ from infrastructure.config import AppConfig
 from infrastructure.telegram.client import TelegramClient
 
 logger = structlog.get_logger()
-
-PROGRESS_FORMAT = "{bar} {processed}/{total} msgs  {pct}%"
-
-
-def _format_progress_bar(processed: int, total: int, width: int = 20) -> str:
-    if total == 0:
-        return "⬜" * width
-    filled = processed * width // total
-    return "⬛" * filled + "⬜" * (width - filled)
 
 
 def _monthly_filename(timestamp: datetime) -> str:
@@ -247,6 +239,7 @@ class ChatExportEngine:
 
             try:
                 client = await self._user_client_for_export(chat_id)
+                logger.info("export access verified", chat_id=chat_id)
 
                 since_msg_id: int | None = None
                 since_date: datetime | None = None
@@ -268,10 +261,16 @@ class ChatExportEngine:
                     notify_chat_id if notify_chat_id is not None else chat_id
                 )
 
-                total = await self._count_messages(
-                    client, chat_id, since_msg_id, since_date
+                self._progress.total = 0
+
+                _export_start = time.monotonic()
+                logger.info(
+                    "export started",
+                    chat_id=chat_id,
+                    since=since_msg_id
+                    or (since_date.isoformat() if since_date else None),
+                    parallelism=parallelism,
                 )
-                self._progress.total = total
 
                 await self._export_messages(
                     client, chat_id, bot_name, since_msg_id, since_date, parallelism
@@ -279,6 +278,7 @@ class ChatExportEngine:
 
                 await self._write_summary(chat_id, bot_name, since_msg_id, since_date)
 
+                _export_elapsed = time.monotonic() - _export_start
                 state = self._progress.state
                 if state == ExportState.CANCELLED:
                     await self._edit_progress_message("⏹️ Export cancelled")
@@ -294,6 +294,13 @@ class ChatExportEngine:
                         summary += f" · {self._progress.media_count} media files"
                     summary += f" · {dur.total_seconds():.0f}s"
                     await self._edit_progress_message(summary)
+                logger.info(
+                    "export completed",
+                    chat_id=chat_id,
+                    processed=self._progress.processed,
+                    media_count=self._progress.media_count,
+                    duration_s=round(_export_elapsed, 1),
+                )
 
             except Exception:
                 logger.exception("Export failed", chat_id=chat_id)
@@ -370,52 +377,16 @@ class ChatExportEngine:
             logger.warning("Failed to edit progress message")
 
     async def _update_progress(
-        self, processed: int, total: int, media_count: int = 0, media_bytes: int = 0
+        self, processed: int, media_count: int = 0, media_bytes: int = 0
     ) -> None:
         self._progress.processed = processed
         self._progress.media_count = media_count
         self._progress.media_bytes = media_bytes
 
-        bar = _format_progress_bar(processed, total)
-        pct = round(processed / total * 100, 1) if total else 0.0
-        text = PROGRESS_FORMAT.format(
-            bar=bar, processed=processed, total=total, pct=pct
-        )
+        text = f"📦 {processed} messages"
+        if media_count:
+            text += f" · {media_count} media"
         await self._edit_progress_message(text)
-
-    async def _count_messages(
-        self,
-        client: TelegramClient,
-        chat_id: int,
-        since_msg_id: int | None,
-        since_date: datetime | None,
-    ) -> int:
-        """First pass: count messages for progress bar."""
-        if self._cancelled.is_set():
-            return 0
-
-        count = 0
-        offset_id = 0
-        while True:
-            if self._cancelled.is_set():
-                return count
-            await self._paused.wait()
-
-            page = await client.get_chat_history(
-                chat_id, limit=100, offset_id=offset_id
-            )
-            if not page:
-                break
-
-            for msg in page:
-                if since_msg_id is not None and msg.id < since_msg_id:
-                    continue
-                if since_date and msg.date and msg.date < since_date:
-                    continue
-                count += 1
-
-            offset_id = page[-1].id
-        return count
 
     async def _export_messages(
         self,
@@ -437,7 +408,6 @@ class ChatExportEngine:
         open_files: dict[str, Any] = {}
 
         processed = 0
-        total = self._progress.total
         media_count = 0
         media_bytes = 0
 
@@ -515,9 +485,15 @@ class ChatExportEngine:
                 )
 
                 processed += 1
-                if processed % 50 == 0 or processed == total:
-                    await self._update_progress(
-                        processed, total, media_count, media_bytes
+                if processed % 50 == 0:
+                    await self._update_progress(processed, media_count, media_bytes)
+                if processed % 1000 == 0:
+                    logger.info(
+                        "export progress",
+                        chat_id=chat_id,
+                        processed=processed,
+                        media_count=media_count,
+                        media_bytes=media_bytes,
                     )
 
             offset_id = page[-1].id
