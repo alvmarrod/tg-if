@@ -136,6 +136,7 @@ class AdminCommandHandler:
         self._on_shutdown = on_shutdown
         self._on_start = on_start
         self._on_restart = on_restart
+        self._chats_search: dict[int, str] = {}
 
     async def register_commands(self) -> None:
         commands: list[tuple[str, str]] = [
@@ -175,7 +176,10 @@ class AdminCommandHandler:
             return
 
         if isinstance(event, CallbackQueryEvent):
-            await self._handle_export_callback(event)
+            if event.callback_data.startswith("chats:"):
+                await self._handle_chats_callback(event)
+            else:
+                await self._handle_export_callback(event)
             return
 
         if not isinstance(event, CommandEvent):
@@ -203,7 +207,7 @@ class AdminCommandHandler:
         elif cmd == "log":
             await self._cmd_log(event.chat_id, args)
         elif cmd == "chats":
-            await self._cmd_chats(event.chat_id)
+            await self._cmd_chats(event.chat_id, args)
         elif cmd == "export":
             await self._cmd_export(event.chat_id, args)
         elif cmd in ("export-cancel", "export_cancel"):
@@ -1001,48 +1005,14 @@ class AdminCommandHandler:
             f"Purged {deleted} upload record{'s' if deleted != 1 else ''}",
         )
 
-    async def _cmd_chats(self, chat_id: int) -> None:
+    _ITEMS_PER_PAGE = 15
+
+    async def _collect_chats(self) -> list[ChatInfo]:
         if not self._clients:
-            await self._admin.send_text(chat_id, "No bot clients available")
-            return
+            return []
 
         all_chats: list[ChatInfo] = []
         seen_ids: set[int] = set()
-
-        if (
-            self._chat_exporter is not None
-            and getattr(self._chat_exporter, "_user_client", None) is not None
-        ):
-            user_client = self._chat_exporter._user_client
-            assert user_client is not None  # narrow type for mypy
-            try:
-                user_dialogs = await user_client.discover_chats()
-                for d in user_dialogs:
-                    if d["chat_id"] in seen_ids:
-                        continue
-                    seen_ids.add(d["chat_id"])
-                    try:
-                        chat_type = ChatType(d["type"])
-                    except ValueError:
-                        logger.warning(
-                            "Unknown chat type",
-                            type=d["type"],
-                            chat_id=d["chat_id"],
-                        )
-                        continue
-                    ci = ChatInfo(
-                        chat_id=d["chat_id"],
-                        title=d["title"],
-                        chat_type=chat_type,
-                        members=d["members"],
-                        can_read=True,
-                        can_write=d["can_write"],
-                        exportable=True,
-                        bot_id="__user__",
-                    )
-                    all_chats.append(ci)
-            except Exception:
-                logger.warning("Failed to get user dialogs", exc_info=True)
 
         for bot_name, client in self._clients.items():
             try:
@@ -1061,7 +1031,6 @@ class AdminCommandHandler:
                         "Unknown chat type", type=d["type"], chat_id=d["chat_id"]
                     )
                     continue
-                # TODO: deferred — add --search filter for large chat lists
                 ci = ChatInfo(
                     chat_id=d["chat_id"],
                     title=d["title"],
@@ -1074,27 +1043,135 @@ class AdminCommandHandler:
                 )
                 all_chats.append(ci)
 
+        all_chats.sort(key=lambda c: c.title.lower())
+        return all_chats
+
+    async def _cmd_chats(self, chat_id: int, args: list[str]) -> None:
+        kwargs = _parse_kwargs(args)
+        search = kwargs.get("search", "").strip().lower()
+
+        if search:
+            self._chats_search[chat_id] = search
+        else:
+            self._chats_search.pop(chat_id, None)
+
+        if not self._clients:
+            await self._admin.send_text(chat_id, "No bot clients available")
+            return
+
+        all_chats = await self._collect_chats()
+
         if not all_chats:
             await self._admin.send_text(chat_id, "No accessible chats found")
             return
 
-        all_chats.sort(key=lambda c: c.title.lower())
+        if search:
+            all_chats = [c for c in all_chats if search in c.title.lower()]
+
+        if not all_chats:
+            if search:
+                await self._admin.send_text(chat_id, f'No chats matching "{search}"')
+            else:
+                await self._admin.send_text(chat_id, "No accessible chats found")
+            return
+
+        await self._render_chats_page(chat_id, all_chats, page=0, search=search)
+
+    async def _render_chats_page(
+        self,
+        chat_id: int,
+        all_chats: list[ChatInfo],
+        page: int,
+        search: str = "",
+        message_id: int | None = None,
+    ) -> None:
+        total = len(all_chats)
+        total_pages = (total + self._ITEMS_PER_PAGE - 1) // self._ITEMS_PER_PAGE
+        page = max(0, min(page, total_pages - 1))
+
+        start = page * self._ITEMS_PER_PAGE
+        page_chats = all_chats[start : start + self._ITEMS_PER_PAGE]
+
+        header = "Chats"
+        if search:
+            header += f' matching "{search}"'
+        if total_pages > 1:
+            header += f" (page {page + 1}/{total_pages})"
 
         lines = [
-            "Available chats:",
+            header + ":",
             f"{'Title':<30} {'ID':<15} {'Type':<12} {'Members':>8}  Ex",
         ]
-        for c in all_chats:
+        for c in page_chats:
             export_mark = "✅" if c.exportable else "❌"
             lines.append(
                 f"{c.title[:28]:<30} {c.chat_id:<15} {c.chat_type.value:<12} "
                 f"{c.members:>8}  {export_mark}"
             )
         lines.append("")
-        lines.append(
-            f"Total: {len(all_chats)} chat{'s' if len(all_chats) != 1 else ''}"
+        lines.append(f"Total: {total} chat{'s' if total != 1 else ''}")
+
+        buttons: list[list[dict[str, str]]] = []
+        if total_pages > 1:
+            nav_row: list[dict[str, str]] = []
+            if page > 0:
+                nav_row.append({"text": "◀️ Prev", "callback_data": f"chats:{page - 1}"})
+            nav_row.append(
+                {"text": f"{page + 1}/{total_pages}", "callback_data": "chats:noop"}
+            )
+            if page < total_pages - 1:
+                nav_row.append({"text": "Next ▶️", "callback_data": f"chats:{page + 1}"})
+            buttons.append(nav_row)
+
+        text = "\n".join(lines)
+
+        if message_id is not None:
+            await self._admin.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                reply_markup=buttons,
+            )
+        else:
+            await self._admin.send_text(
+                chat_id,
+                text,
+                reply_markup=buttons,
+            )
+
+    async def _handle_chats_callback(self, event: CallbackQueryEvent) -> None:
+        try:
+            page = int(event.callback_data.split(":", 1)[1])
+        except (ValueError, IndexError):
+            await self._admin.answer_callback_query(event.callback_id)
+            return
+
+        search = self._chats_search.get(event.chat_id, "")
+
+        all_chats = await self._collect_chats()
+        if not all_chats:
+            await self._admin.answer_callback_query(
+                event.callback_id, "No chats available"
+            )
+            return
+
+        if search:
+            all_chats = [c for c in all_chats if search in c.title.lower()]
+
+        if not all_chats:
+            await self._admin.answer_callback_query(
+                event.callback_id, "No matching chats"
+            )
+            return
+
+        await self._render_chats_page(
+            event.chat_id,
+            all_chats,
+            page=page,
+            search=search,
+            message_id=event.message_id,
         )
-        await self._admin.send_text(chat_id, "\n".join(lines))
+        await self._admin.answer_callback_query(event.callback_id)
 
     async def _cmd_export(self, chat_id: int, args: list[str]) -> None:
         if self._chat_exporter is None:

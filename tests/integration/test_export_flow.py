@@ -172,7 +172,7 @@ class TestExportFlow:
             _make_msg(3, "msg three"),
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
         await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
@@ -199,7 +199,7 @@ class TestExportFlow:
             _make_msg(3, "aug", datetime(2026, 8, 10, tzinfo=timezone.utc)),
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
         await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         for fname in ("2026-06.json", "2026-07.json", "2026-08.json"):
@@ -223,7 +223,7 @@ class TestExportFlow:
             _make_msg(3, "photo b", file_unique_id="def456"),
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
         await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         assert client.download_media.await_count == 2
@@ -247,7 +247,7 @@ class TestExportFlow:
             _make_msg(2, "no reactions"),
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
         await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
@@ -268,7 +268,7 @@ class TestExportFlow:
             [page1, page2, []],
             probe=page1,
         )
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
         await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
@@ -288,7 +288,7 @@ class TestExportFlow:
             _make_msg(30, "recent"),
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
         await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999, since=20)
 
         monthly = export_dir / str(CHAT_ID) / "2026-06.json"
@@ -306,7 +306,7 @@ class TestExportFlow:
             _make_msg(3, "recent", datetime(2026, 7, 1, tzinfo=timezone.utc)),
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
         await engine.export_chat(
             chat_id=CHAT_ID, notify_chat_id=999, since="2026-06-01"
         )
@@ -322,7 +322,7 @@ class TestExportFlow:
     ) -> None:
         msgs = [_make_msg(i) for i in range(1, 101)]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
 
         import asyncio
 
@@ -345,7 +345,7 @@ class TestExportFlow:
             _make_msg(3, "last", dt),
         ]
         client = _page_sequence([msgs, []], [msgs, []], probe=msgs)
-        engine = _make_engine(config, client, admin_client)
+        engine = _make_engine(config, client, admin_client, user_client=client)
         await engine.export_chat(chat_id=CHAT_ID, notify_chat_id=999)
 
         summary_path = export_dir / str(CHAT_ID) / "_summary.json"
