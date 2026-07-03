@@ -264,6 +264,7 @@ class ChatExportEngine:
         notify_chat_id: int | None = None,
         since: str | int | None = None,
         parallelism: int = 1,
+        offset: int | None = None,
     ) -> None:
         """Run a full chat export.
 
@@ -279,6 +280,9 @@ class ChatExportEngine:
         If found and matches ``chat_id``, the export is restored from the
         checkpoint in PAUSED state — the caller must resume it.  A stale
         checkpoint for a different chat is deleted automatically.
+
+        ``offset`` sets the initial pagination offset — messages at or newer
+        than this ID are skipped.  Ignored when restoring from a checkpoint.
         """
         if self._lock.locked():
             msg = "Export already in progress"
@@ -334,7 +338,7 @@ class ChatExportEngine:
                     current_chat_id=chat_id,
                     start_time=datetime.now(timezone.utc),
                 )
-                start_offset_id = 0
+                start_offset_id = offset if offset is not None else 0
                 since_msg_id = None
                 since_date = None
                 bot_name = ""
@@ -378,6 +382,7 @@ class ChatExportEngine:
                     or (since_date.isoformat() if since_date else None),
                     parallelism=parallelism,
                     restored=restoring,
+                    offset=start_offset_id or None,
                 )
 
                 await self._export_messages(
