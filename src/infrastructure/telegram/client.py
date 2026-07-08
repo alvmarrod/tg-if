@@ -2,6 +2,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import pyrogram
+import pyrogram.connection.connection  # noqa: F811
+import pyrogram.session.session  # noqa: F811
 import structlog
 from pyrogram.enums import ParseMode
 from pyrogram.handlers import DisconnectHandler
@@ -21,6 +23,11 @@ from infrastructure.telegram.handlers import (
     reaction_count_updated_to_event,
     reaction_updated_to_event,
 )
+
+# Increase Pyrofork keepalive tolerance to reduce spurious disconnections.
+pyrogram.session.session.Session.PING_INTERVAL = 15  # 5s → 15s
+pyrogram.session.session.Session.WAIT_TIMEOUT = 30  # 15s → 30s
+pyrogram.connection.connection.Connection.MAX_CONNECTION_ATTEMPTS = 5  # 3 → 5
 
 
 logger = structlog.get_logger()

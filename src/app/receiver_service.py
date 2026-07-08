@@ -57,6 +57,10 @@ class ReceiverService:
         self._started = False
         self._running = False
 
+        self._disconnect_timers: dict[str, asyncio.Task[None]] = {}
+        self._disconnect_notified: set[str] = set()
+        self._debounce_delay = 300  # seconds (5 min)
+
         clients: dict[str, TelegramClient] = {}
         for bot_cfg in config.bots:
             client = TelegramClient(
@@ -196,7 +200,13 @@ class ReceiverService:
     async def _on_client_connected(self, name: str) -> None:
         logger.info("client connected", bot=name)
         prom.client_connected.labels(bot=name).set(1)
-        if self._notifier:
+
+        timer = self._disconnect_timers.pop(name, None)
+        if timer is not None and not timer.done():
+            timer.cancel()
+
+        if self._notifier and name in self._disconnect_notified:
+            self._disconnect_notified.discard(name)
             await self._notifier.notify(
                 AdminSignalType.COMPONENT_CONNECTED, component=name
             )
@@ -204,6 +214,25 @@ class ReceiverService:
     async def _on_client_disconnected(self, name: str) -> None:
         logger.warning("client disconnected", bot=name)
         prom.client_connected.labels(bot=name).set(0)
+
+        if name in self._disconnect_timers:
+            return  # timer already running — counting from first disconnect
+
+        timer = asyncio.create_task(self._disconnect_timeout(name))
+        self._disconnect_timers[name] = timer
+
+    async def _disconnect_timeout(self, name: str) -> None:
+        try:
+            await asyncio.sleep(self._debounce_delay)
+        except asyncio.CancelledError:
+            return
+
+        self._disconnect_timers.pop(name, None)
+        self._disconnect_notified.add(name)
+        logger.warning(
+            "client disconnected (confirmed)", bot=name, delay=self._debounce_delay
+        )
+
         if self._notifier:
             await self._notifier.notify(
                 AdminSignalType.COMPONENT_DISCONNECTED, component=name
@@ -328,6 +357,11 @@ class ReceiverService:
         if self._health_task is not None:
             self._health_task.cancel()
             self._health_task = None
+
+        for timer in self._disconnect_timers.values():
+            if not timer.done():
+                timer.cancel()
+        self._disconnect_timers.clear()
 
         for client in self._clients.values():
             await client.stop()

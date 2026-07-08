@@ -2,16 +2,15 @@
 
 ## [Unreleased]
 
-### Added
+## [0.6.0] - 2026-07-08
 
-- Disk-persisted export checkpoints (`_export_state.json`): pause saves state (offset_id,
-  seen_file_ids, progress counts, progress message ID), `/export <chat_id>` after restart
-  detects checkpoint and restores in PAUSED state for cross-process resume
-- `ExportCheckpoint` Pydantic model with all serializable export state fields
-- Checkpoint lifecycle: saved on pause, deleted on completion/cancel/error, stale checkpoints
-  for different chat reaped on new export start
-- `_export_messages` gains `start_offset_id` parameter for resume from arbitrary offset
-- `doc/chat_export.md`: cross-process resume documented, removed out-of-scope note
+### Changed
+
+- Increased Pyrofork `PING_INTERVAL` to 15s, `WAIT_TIMEOUT` to 30s,
+  `MAX_CONNECTION_ATTEMPTS` to 5 — reduces spurious disconnections from
+  aggressive keepalive timeouts
+- Debounced client disconnect admin notifications: ❌ only sent after 5 minutes
+  of sustained disconnection; ✅ suppressed for transient flaps
 
 ## [0.4.0] - 2026-07-02
 
