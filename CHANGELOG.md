@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-08
+
+### Changed
+
+- Migrated MTProto library from Pyrofork to PyroTGFork, a community-maintained
+  fork of Pyrogram with broader Telegram API support (Layer 225)
+- `Connection.MAX_CONNECTION_ATTEMPTS` renamed to `MAX_RETRIES`; adapted import
+  paths and type annotations for PyroTGFork compatibility
+
 ## [0.6.0] - 2026-07-08
 
 ### Changed

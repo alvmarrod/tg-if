@@ -201,7 +201,7 @@ def edited_message_to_event(
 
 
 def _extract_reaction_emoji(reactions: list[Any]) -> str:
-    """Extract the first emoji from a Pyrofork Reaction list."""
+    """Extract the first emoji from a Pyrogram Reaction list."""
     if not reactions:
         return ""
     r = reactions[0]

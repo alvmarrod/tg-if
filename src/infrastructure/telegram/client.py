@@ -25,7 +25,7 @@ from infrastructure.telegram.handlers import (
     reaction_updated_to_event,
 )
 
-# Increase Pyrofork keepalive tolerance to reduce spurious disconnections.
+# Increase Pyrogram keepalive tolerance to reduce spurious disconnections.
 pyrogram.session.session.Session.PING_INTERVAL = 15  # 5s → 15s
 pyrogram.session.session.Session.WAIT_TIMEOUT = 30  # 15s → 30s
 pyrogram.connection.connection.Connection.MAX_RETRIES = 5  # 3 → 5
@@ -89,7 +89,7 @@ class TelegramClient:
         return list(self._known_chats.values())
 
     def _register_chat(self, chat: Any) -> None:
-        """Store or update a chat entry from a raw Pyrofork Chat object."""
+        """Store or update a chat entry from a raw Pyrogram Chat object."""
         title = chat.title or ""
         if not title:
             first = getattr(chat, "first_name", "") or ""
@@ -386,7 +386,7 @@ class TelegramClient:
     async def get_dialogs(self) -> list[dict[str, Any]]:
         """Return known chats.
 
-        This method only works for user (non-bot) accounts in Pyrofork.
+        This method only works for user (non-bot) accounts in Pyrogram.
         For bot accounts, chats are tracked locally via _register_chat()
         as they appear in incoming events. Use the known_chats property
         instead for a full list.
@@ -394,7 +394,7 @@ class TelegramClient:
         return self.known_chats
 
     async def discover_chats(self) -> list[dict[str, Any]]:
-        """Call Pyrofork's real get_dialogs() to discover all accessible chats.
+        """Call Pyrogram's real get_dialogs() to discover all accessible chats.
 
         Only works for user (non-bot) accounts via MTProto.
         Bots will get BOT_METHOD_INVALID — callers must guard with is_user.
