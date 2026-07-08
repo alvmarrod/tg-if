@@ -5,7 +5,7 @@
 [![CI](https://github.com/alvmarrod/tg-if/actions/workflows/ci.yml/badge.svg)](https://github.com/alvmarrod/tg-if/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-Telegram MTProto gateway service that receives events via Pyrofork, routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
+Telegram MTProto gateway service that receives events via PyroTGFork (Pyrogram-based), routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
 
 ## 🧩 Architecture
 
@@ -14,7 +14,7 @@ Telegram MTProto gateway service that receives events via Pyrofork, routes them 
         │
         ▼
 ┌────────────────────────────────────────────────┐
-│         tg-if (Pyrofork)                       │
+│         tg-if (PyroTGFork)                     │
 │                                                 │
 │  ┌────────────────┐  ┌────────────────────┐   │
 │  │ Session        │  │ Event Dispatcher   │   │
@@ -58,7 +58,7 @@ Telegram MTProto gateway service that receives events via Pyrofork, routes them 
 - **Prometheus `/metrics` endpoint**: Export all counters and gauges for external scraping
 - **Media retrieval**: Hybrid eager/lazy HTTP proxy for media files (see `doc/media_retrieval.md`)
 - **Media upload**: Sequential HTTP upload → `upl_<hash>` reference in OutgoingResponse with Telegram file_id caching (see `doc/subscriber_media_interface_esp.md`)
-- **Delete messages**: `delete_message` response type for removing messages via Pyrofork `delete_messages`
+- **Delete messages**: `delete_message` response type for removing messages via `delete_messages`
 - **Edited message handling**: Subscribers receive `edited_message` events with full message context when a user edits a previously sent message (text, command, or media)
 - **Enriched event envelopes**: Subscribers receive `message_id`, `text`, `caption`, `command_args`, `from_user`, and `reply_to_message_id` on every incoming event
 - **Chat export**: On-demand full chat history export to filesystem via `/export` admin command. Requires a pre-authenticated user MTProto session — see `doc/chat_export.md`
@@ -152,7 +152,7 @@ incoming.events.{bot_name}.{event_type}.{subtype}
 ## 🧰 Technology Stack
 
 - **Python 3.14+**: Core language
-- **Pyrofork**: MTProto client for Telegram API
+- **PyroTGFork**: MTProto client for Telegram API (Pyrogram fork)
 - **RabbitMQ (AMQP)**: Message broker with topic routing
 - **Pydantic**: Schema validation
 - **Structlog**: Structured logging
@@ -221,7 +221,7 @@ tg-if/
 │       ├── sqlite.py          # UploadRegistry (SQLite)
 │       ├── telegram/
 │       │   ├── __init__.py
-│       │   ├── client.py      # Pyrofork client wrapper
+│       │   ├── client.py      # PyroTGFork / Pyrogram client wrapper
 │       │   └── handlers.py    # Telegram event handlers
 │       ├── broker/
 │       │   ├── __init__.py
@@ -321,7 +321,7 @@ The admin bot automatically sends alerts for control-plane events:
 | `✅ {component} connected` | Broker or bot transitions from disconnected → connected |
 | `❌ {component} disconnected` | Broker or bot transitions from connected → disconnected |
 
-Telegram client connection changes are detected instantly via Pyrofork callbacks. Broker and admin bot status are checked every 60 seconds. Notifications are sent on state transitions only (no repeated alerts for stable states).
+Telegram client connection changes are detected instantly via PyroTGFork callbacks. Broker and admin bot status are checked every 60 seconds. Notifications are sent on state transitions only (no repeated alerts for stable states).
 
 ### Interactive Commands
 

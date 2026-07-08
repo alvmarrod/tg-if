@@ -1014,26 +1014,16 @@ wheels = [
 ]
 
 [[package]]
-name = "pymediainfo-pyrofork"
-version = "6.0.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/01/43/ebfd048e84bb264bb133d545312e35b49638bcd7d5ad973c023e0026a36b/pymediainfo_pyrofork-6.0.2.tar.gz", hash = "sha256:fce9402edfd1fa09aba7b3cac4c41ba7fcf6820e561b4db4f9c1a1a68c487c36", size = 446514, upload-time = "2024-10-08T14:31:39.531Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/16/7c2b2f969e84e5f196809c10da6c847c505fb722b9d636bf6f6bf8f2e919/pymediainfo_pyrofork-6.0.2-py2.py3-none-any.whl", hash = "sha256:674fa8e53de861635b9dc4f77c2ad712306a798bf28864952503bf328210c4c3", size = 9356, upload-time = "2024-10-08T14:31:37.054Z" },
-]
-
-[[package]]
-name = "pyrofork"
-version = "2.3.69"
+name = "pyrotgfork"
+version = "2.2.24"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyaes" },
-    { name = "pymediainfo-pyrofork" },
     { name = "pysocks" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/86/da/c6e44522450483ca4a42130759a8dbc96e28c35e7ad041e16aca85c45756/pyrofork-2.3.69.tar.gz", hash = "sha256:945b30d50b31819a903749825e2748ac5a6af1e073bf97da8c53e510ff3ed58d", size = 506694, upload-time = "2025-12-10T18:35:57.316Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/6c/b1c12b2f5ad1b826d6f905b6dad20419b8a51209d4e2ba48d1bb77d6db24/pyrotgfork-2.2.24.tar.gz", hash = "sha256:890516ec8a05594c96cac1fd74d3f8ca55c4dc383937f9e5527968412f8f6fde", size = 544383, upload-time = "2026-05-16T13:10:01.506Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ea/ec/9395a0d3196a388a0ccd0994cf2113068b3740ab2615d8bbc1c12d762e42/pyrofork-2.3.69-py3-none-any.whl", hash = "sha256:13f7a7fbfa5ede230df6b6df10fcc2c6b33b4c3d75bf2088a7d32f41621df8e4", size = 5270720, upload-time = "2025-12-10T18:35:55.246Z" },
+    { url = "https://files.pythonhosted.org/packages/25/0b/32a30566fd4c0188d15dda209cc7d0002e6f891e1ace0528f0c4cfbf9d7c/pyrotgfork-2.2.24-py3-none-any.whl", hash = "sha256:87a979003c38fdc88251d599ad75d28603b6fc16fb7ba726e6dc9f780c278507", size = 5768261, upload-time = "2026-05-16T13:09:58.886Z" },
 ]
 
 [[package]]
@@ -1249,7 +1239,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "prometheus-client" },
     { name = "pydantic" },
-    { name = "pyrofork" },
+    { name = "pyrotgfork" },
     { name = "structlog" },
     { name = "tgcrypto" },
 ]
@@ -1278,7 +1268,7 @@ requires-dist = [
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "prometheus-client", specifier = ">=0.21.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
-    { name = "pyrofork", specifier = ">=2.3.69" },
+    { name = "pyrotgfork", specifier = ">=2.2.24" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },

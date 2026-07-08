@@ -49,7 +49,7 @@ Message schemas for all three `tg-if.responses` queues: see [`subscriber_interfa
 ## Event Flow
 
 ```text
-Telegram → Pyrofork → tg-if → tg-if.events (topic) → Subscriber queue
+Telegram → PyroTGFork → tg-if → tg-if.events (topic) → Subscriber queue
                                               ↑
 Subscriber → tg-if.responses (direct) → outgoing.responses → tg-if
 ```

@@ -2,9 +2,9 @@
 
 ## Project Identity
 
-**tg-if** is a Telegram MTProto gateway service that receives events via Pyrofork, routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
+**tg-if** is a Telegram MTProto gateway service that receives events via PyroTGFork (Pyrogram-based), routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
 
-The core distinction vs. the Bot HTTP API: Pyrofork (MTProto) bypasses Bot API limitations (rate limits, webhook-only, no access to full chat history, restricted media handling) by speaking the Telegram protocol directly.
+The core distinction vs. the Bot HTTP API: MTProto (via PyroTGFork) bypasses Bot API limitations (rate limits, webhook-only, no access to full chat history, restricted media handling) by speaking the Telegram protocol directly.
 
 ## Current State
 
@@ -75,7 +75,7 @@ Exchange: tg-if.responses (direct, durable)
 - **Testing**: pytest (directory structure exists, files pending)
 - **Typing**: Full type hints, mypy strict mode
 - **Linting/formatting**: ruff
-- **Proto**: MTProto via Pyrofork (not HTTP Bot API)
+- **Proto**: MTProto via PyroTGFork / Pyrogram (not HTTP Bot API)
 - **Project structure**: Hexagonal-ish layout (domain/ app/ infrastructure/)
 - **Config**: JSON for bot config, env vars for infrastructure settings
 - **Entrypoint**: `main.py` at project root (not `src/main.py` despite README diagram)
@@ -85,7 +85,7 @@ Exchange: tg-if.responses (direct, durable)
 
 | Decision | Rationale |
 |----------|-----------|
-| Pyrofork (MTProto) over HTTP Bot API | Bypass Bot API limitations (rate limits, webhook-only model, restricted chat access) |
+| PyroTGFork / Pyrogram (MTProto) over HTTP Bot API | Bypass Bot API limitations (rate limits, webhook-only model, restricted chat access) |
 | Regular RabbitMQ (AMQP) over Streams | Streams consume more server resources; regular AMQP with topic exchanges is lighter and sufficient |
 | Pydantic over dataclasses | Validation, serialization, schema generation |
 | Single service managing all bots | Instead of one process per bot; simpler ops, shared broker connection |

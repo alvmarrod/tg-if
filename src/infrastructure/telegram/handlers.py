@@ -201,7 +201,7 @@ def edited_message_to_event(
 
 
 def _extract_reaction_emoji(reactions: list[Any]) -> str:
-    """Extract the first emoji from a Pyrofork Reaction list."""
+    """Extract the first emoji from a Pyrogram Reaction list."""
     if not reactions:
         return ""
     r = reactions[0]
@@ -325,7 +325,7 @@ def build_reply_markup(
             for btn in row
         ]
         rows.append(keyboard_row)
-    return InlineKeyboardMarkup(inline_keyboard=rows)  # type: ignore[arg-type]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def parse_session_path(session_file: str) -> tuple[str, str]:

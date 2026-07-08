@@ -2,7 +2,7 @@
 """Pre-authenticate a user MTProto session for tg-if chat export.
 
 Reads the "user" key from config/bots.json, runs an interactive
-Pyrofork login via stdin, and saves the .session file for
+Pyrogram login via stdin, and saves the .session file for
 headless Docker deployment.
 
 Usage:

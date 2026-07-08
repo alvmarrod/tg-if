@@ -19,7 +19,7 @@ class EventType(str, Enum):
 
 
 class ChatType(str, Enum):
-    """Type of Telegram chat. Mirrors Pyrofork's ChatType enum."""
+    """Type of Telegram chat. Mirrors Pyrogram's ChatType enum."""
 
     PRIVATE = "private"
     BOT = "bot"
@@ -64,7 +64,7 @@ class TelegramEvent(BaseModel):
     )
     update_type: str | None = Field(
         default=None,
-        description="Pyrofork handler source: message, edited_message, callback_query, message_reaction_updated, etc.",
+        description="Pyrogram handler source: message, edited_message, callback_query, message_reaction_updated, etc.",
     )
 
     model_config = ConfigDict(use_enum_values=True)

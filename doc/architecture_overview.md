@@ -2,12 +2,12 @@
 
 ## System Purpose
 
-tg-if is a Telegram MTProto gateway service that receives events via Pyrofork, routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
+tg-if is a Telegram MTProto gateway service that receives events via PyroTGFork (Pyrogram-based), routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
 
 ## Flow
 
 ```text
-Telegram → Pyrofork → EventDispatcher → Publisher → RabbitMQ (tg-if.events)
+Telegram → PyroTGFork → EventDispatcher → Publisher → RabbitMQ (tg-if.events)
                                                                            ↓
                                                                Subscriber Services
                                                                            ↓
@@ -40,7 +40,7 @@ Media files flow through a separate HTTP path: see `doc/media_retrieval.md` for 
 ### Infrastructure Layer (`src/infrastructure/`)
 
 - config.py: AppConfig via env vars + bots.json
-- telegram/client.py: Pyrofork client wrapper (6 send methods)
+- telegram/client.py: PyroTGFork / Pyrogram client wrapper (6 send methods)
 - telegram/handlers.py: event conversion from MTProto to domain entities
 - broker/rabbitmq.py: RabbitMQManager (topology: tg-if.events topic + tg-if.responses direct)
 - broker/publisher.py: publish to tg-if.events
@@ -99,7 +99,7 @@ graph TB
 
 ## Key Decisions
 
-- Pyrofork (MTProto) over HTTP Bot API
+- PyroTGFork (MTProto) over HTTP Bot API
 - Regular RabbitMQ AMQP (not Streams)
 - Internal retry over NACK requeue
 - Admin bot with dedicated session
