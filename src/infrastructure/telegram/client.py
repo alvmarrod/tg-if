@@ -5,8 +5,9 @@ import pyrogram
 import pyrogram.connection.connection  # noqa: F811
 import pyrogram.session.session  # noqa: F811
 import structlog
+from pyrogram.client import Client as PyrogramClient
 from pyrogram.enums import ParseMode
-from pyrogram.handlers import DisconnectHandler
+from pyrogram.handlers.disconnect_handler import DisconnectHandler
 from pyrogram.types import BotCommand, InputMediaPhoto, InputMediaVideo, Message
 
 from domain.entities import ChatType, RoutingContext, TelegramEvent
@@ -27,7 +28,7 @@ from infrastructure.telegram.handlers import (
 # Increase Pyrofork keepalive tolerance to reduce spurious disconnections.
 pyrogram.session.session.Session.PING_INTERVAL = 15  # 5s → 15s
 pyrogram.session.session.Session.WAIT_TIMEOUT = 30  # 15s → 30s
-pyrogram.connection.connection.Connection.MAX_CONNECTION_ATTEMPTS = 5  # 3 → 5
+pyrogram.connection.connection.Connection.MAX_RETRIES = 5  # 3 → 5
 
 
 logger = structlog.get_logger()
@@ -63,7 +64,7 @@ class TelegramClient:
         )
         if config.bot_token is not None:
             kwargs["bot_token"] = config.bot_token
-        self._client = pyrogram.Client(**kwargs)
+        self._client = PyrogramClient(**kwargs)
         self._client.on_message()(self._on_message)
         self._client.on_edited_message()(self._on_edited_message)
         self._client.on_callback_query()(self._on_callback_query)
@@ -322,12 +323,12 @@ class TelegramClient:
         if self._on_connect_cb:
             await self._on_connect_cb()
 
-    async def _on_disconnect_handler(self, client: pyrogram.Client) -> None:
+    async def _on_disconnect_handler(self, client: PyrogramClient) -> None:
         logger.warning("telegram client disconnected", bot=self._bot_id)
         if self._on_disconnect_cb:
             await self._on_disconnect_cb()
 
-    async def _on_message(self, client: pyrogram.Client, message: Message) -> None:
+    async def _on_message(self, client: PyrogramClient, message: Message) -> None:
         if self._event_callback is None:
             return
         self._register_chat(message.chat)
@@ -336,7 +337,7 @@ class TelegramClient:
         context = extract_routing_context(message)
         await self._event_callback(event, context)
 
-    async def _on_callback_query(self, client: pyrogram.Client, query: Any) -> None:
+    async def _on_callback_query(self, client: PyrogramClient, query: Any) -> None:
         if self._event_callback is None:
             return
         chat = getattr(query, "message", None) and getattr(query.message, "chat", None)
@@ -348,7 +349,7 @@ class TelegramClient:
         await self._event_callback(event, context)
 
     async def _on_edited_message(
-        self, client: pyrogram.Client, message: Message
+        self, client: PyrogramClient, message: Message
     ) -> None:
         if self._event_callback is None:
             return
@@ -359,7 +360,7 @@ class TelegramClient:
         await self._event_callback(event, context)
 
     async def _on_message_reaction_updated(
-        self, client: pyrogram.Client, reaction: Any
+        self, client: PyrogramClient, reaction: Any
     ) -> None:
         if self._event_callback is None:
             return
@@ -371,7 +372,7 @@ class TelegramClient:
         await self._event_callback(event, context)
 
     async def _on_message_reaction_count_updated(
-        self, client: pyrogram.Client, reaction: Any
+        self, client: PyrogramClient, reaction: Any
     ) -> None:
         if self._event_callback is None:
             return

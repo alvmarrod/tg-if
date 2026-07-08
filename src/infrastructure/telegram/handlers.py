@@ -325,7 +325,7 @@ def build_reply_markup(
             for btn in row
         ]
         rows.append(keyboard_row)
-    return InlineKeyboardMarkup(inline_keyboard=rows)  # type: ignore[arg-type]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def parse_session_path(session_file: str) -> tuple[str, str]:
