@@ -210,19 +210,19 @@ When `event_type` is `"callback_query"`, the envelope includes two additional to
 
 ### Supported Response Types
 
-`response_type` maps to a Pyrofork method. `payload` keys become the method's kwargs.
+`response_type` maps to a PyroTGFork method. `payload` keys become the method's kwargs.
 
-| `response_type` | Required payload keys | Optional payload keys | Notes |
-|----------------|----------------------|-----------------------|-------|
-| `text` | `text` | `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `photo` | `photo` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `video` | `video` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `document` | `document` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `audio` | `audio` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | |
-| `media_group` | `media` (list of `{type, media, caption?}`) | `reply_to_message_id` | |
-| `edit_message_text` | `message_id`, `text` | `parse_mode`, `reply_markup` | Edits an existing message |
-| `answer_callback_query` | `callback_query_id` | `text`, `show_alert`, `url`, `cache_time` | `chat_id` is **not forwarded** |
-| `delete_message` | `message_ids` (int or list[int]) | `revoke` | Calls `delete_messages` on Pyrofork. `chat_id` is forwarded automatically. |
+| `response_type` | Required payload keys | Optional payload keys (common) | Notes |
+|----------------|----------------------|-------------------------------|-------|
+| `text` | `text` | `parse_mode`, `reply_to_message_id`, `reply_markup` | Any PyroTGFork `send_message` kwarg is accepted (e.g. `disable_web_page_preview`, `disable_notification`, `protect_content`) |
+| `photo` | `photo` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | Any PyroTGFork `send_photo` kwarg is accepted |
+| `video` | `video` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | Any PyroTGFork `send_video` kwarg is accepted |
+| `document` | `document` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | Any PyroTGFork `send_document` kwarg is accepted |
+| `audio` | `audio` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | Any PyroTGFork `send_audio` kwarg is accepted |
+| `media_group` | `media` (list of `{type, media, caption?}`) | `reply_to_message_id` | Any PyroTGFork `send_media_group` kwarg is accepted |
+| `edit_message_text` | `message_id`, `text` | `parse_mode`, `reply_markup` | Edits an existing message; any PyroTGFork `edit_message_text` kwarg is accepted |
+| `answer_callback_query` | `callback_query_id` | `text`, `show_alert`, `url`, `cache_time` | `chat_id` is **not forwarded**; any PyroTGFork `answer_callback_query` kwarg is accepted |
+| `delete_message` | `message_ids` (int or list[int]) | `revoke` | Calls `delete_messages` on PyroTGFork. `chat_id` is forwarded automatically. |
 
 ### Callback Query Flow
 
@@ -285,7 +285,7 @@ For files larger than ~16 MB — or when the subscriber prefers not to inline bi
 1. **POST /upload/{bot_id}** — upload the file via HTTP multipart
 2. **OutgoingResponse** — reference the file via `upl_<SHA256>` in the payload
 
-tg-if resolves `upl_<hash>` at send time: if a Telegram `file_id` is already cached it uses it directly (fast path); otherwise it sends the bytes via Pyrofork and caches the returned `file_id` for reuse.
+tg-if resolves `upl_<hash>` at send time: if a Telegram `file_id` is already cached it uses it directly (fast path); otherwise it sends the bytes via PyroTGFork and caches the returned `file_id` for reuse.
 
 See the full protocol spec (Español): [`doc/subscriber_media_interface_esp.md`](subscriber_media_interface_esp.md)
 
