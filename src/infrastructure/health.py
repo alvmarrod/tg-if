@@ -6,6 +6,7 @@ from aiohttp import web
 from infrastructure.media.endpoint import handle_file_get
 from infrastructure.media.storage import MediaStorage
 from infrastructure.media.upload_routes import (
+    ClientMapKey,
     MaxUploadSizeKey,
     MediaStorageKey,
     UploadRegistryKey,
@@ -51,8 +52,11 @@ async def create_health_server(
     **kwargs: Any,
 ) -> web.TCPSite:
     app = web.Application()
+    client_map = kwargs.pop("client_map", None)
     for key, val in kwargs.items():
         app[key] = val
+    if client_map is not None:
+        app[ClientMapKey] = client_map
     if storage is not None:
         app["storage"] = storage
     if upload_registry is not None:

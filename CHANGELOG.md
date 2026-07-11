@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-11
+
+### Fixed
+
+- `POST /upload/{bot_id}` returned 404 for all requests because `client_map`
+  was stored under a plain string key in the health server app dict but
+  retrieved via `AppKey` (different key objects in aiohttp 3.10+). Now stored
+  via `ClientMapKey` AppKey, matching the handler's lookup
+
 ## [0.9.0] - 2026-07-11
 
 ### Fixed
