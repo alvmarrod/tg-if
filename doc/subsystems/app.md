@@ -64,7 +64,7 @@ Full design: `doc/media_retrieval.md`
 ### MediaDownloader
 
 - Background async task triggered on eager-matched events
-- Downloads media via Pyrofork `download_media(file_id, in_memory=True)`
+- Downloads media via PyroTGFork `download_media(file_id, in_memory=True)`
 - Writes to disk cache keyed by `file_unique_id`
 - Runs concurrently with event publication (non-blocking)
 

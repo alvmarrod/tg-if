@@ -13,7 +13,7 @@ If the subscriber needs the actual media content (e.g., for AI processing, moder
 ## Current State
 
 ```text
-Telegram → message (video/photo) → Pyrofork → message_to_event()
+Telegram → message (video/photo) → PyroTGFork → message_to_event()
                                                       │
                                                       ├─ has_media=True
                                                       ├─ media_type="video"
@@ -150,7 +150,7 @@ Two channels:
 |---|---|
 | `200` | File served (from cache or fresh download) |
 | `404` | Bot not found or `file_unique_id` not valid |
-| `502` | Telegram download failed (Pyrofork error, timeout) |
+| `502` | Telegram download failed (PyroTGFork error, timeout) |
 | `503` | Corresponding Telegram client is disconnected |
 
 ### Security
@@ -307,6 +307,6 @@ Or via admin bot DM:
 
 3. **Media types not covered:** Stickers, voice, video notes — should they follow the same pipeline? File size is tiny (stickers are ~10-50KB), so eager makes sense.
 
-4. **Streaming vs. full-buffer:** Currently `download_media(in_memory=True)` loads the entire file into memory before returning. For very large files (>100MB), this is expensive. Could chunk the download and stream, but Pyrofork doesn't support this natively.
+4. **Streaming vs. full-buffer:** Currently `download_media(in_memory=True)` loads the entire file into memory before returning. For very large files (>100MB), this is expensive. Could chunk the download and stream, but PyroTGFork doesn't support this natively.
 
 5. **File extension mapping:** Telegram media objects don't always have reliable extensions. Do we map by media type (e.g., `animation` → `.gif`, `video` → `.mp4`, `photo` → `.jpg`), or try to extract from the file name in the Telegram message?

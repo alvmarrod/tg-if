@@ -2,15 +2,25 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-11
+
+### Fixed
+
+- `send_text`, `send_photo`, `send_document`, `send_video`, `send_audio`,
+  `edit_message_text`, `answer_callback_query`, `send_media_group` now accept
+  `**kwargs` and forward them to the underlying Pyrogram methods. Subscriber
+  extras like `disable_web_page_preview`, `disable_notification`, or
+  `protect_content` are no longer rejected with `TypeError`
+
 ## [0.8.0] - 2026-07-11
 
 ### Fixed
 
-- `on_connect` callback now passed to `PyrogramClient` constructor instead of
-  being called once manually in `start()`. This ensures it fires on every
-  auto-reconnect, properly cancelling the debounced disconnect timer —
-  previously, transient disconnections followed by successful auto-reconnect
-  still sent a "client disconnected" notification to the admin after 5 minutes
+- Debounced disconnect notifications no longer fire falsely every 5 minutes
+  when the client auto-reconnects within the debounce window. A health-monitor
+  poll now cancels the pending timer on reconnect detection, and
+  `_disconnect_timeout` guards against sending the notification if the client
+  is already connected
 
 ## [0.7.0] - 2026-07-08
 

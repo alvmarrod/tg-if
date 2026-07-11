@@ -35,7 +35,7 @@ Triggers a full history export for the given chat.
 **Behavior:**
 
 - Without `--since`: re-export the entire chat history (overwrites existing export).
-- With `--since` (date): uses Pyrofork's `offset_date` as an approximation, then discards messages before the cutoff.
+- With `--since` (date): uses PyroTGFork's `offset_date` as an approximation, then discards messages before the cutoff.
 - With `--since` (message ID): starts from that message ID.
 - Only one export can run at a time. If an export is already in progress, `/export` is rejected with an "already running" error.
 

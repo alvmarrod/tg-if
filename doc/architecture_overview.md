@@ -40,7 +40,7 @@ Media files flow through a separate HTTP path: see `doc/media_retrieval.md` for 
 ### Infrastructure Layer (`src/infrastructure/`)
 
 - config.py: AppConfig via env vars + bots.json
-- telegram/client.py: PyroTGFork / Pyrogram client wrapper (6 send methods)
+- telegram/client.py: PyroTGFork / Pyrogram client wrapper (send methods for all response types)
 - telegram/handlers.py: event conversion from MTProto to domain entities
 - broker/rabbitmq.py: RabbitMQManager (topology: tg-if.events topic + tg-if.responses direct)
 - broker/publisher.py: publish to tg-if.events

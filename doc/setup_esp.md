@@ -2,7 +2,7 @@
 
 ## Visión General
 
-**tg-if** es un gateway de Telegram MTProto que recibe eventos vía Pyrofork,
+**tg-if** es un gateway de Telegram MTProto que recibe eventos vía PyroTGFork,
 los evalúa contra un motor de reglas (`RulesEngine`), y publica los eventos
 coincidentes en RabbitMQ (AMQP) para que suscriptores externos los consuman.
 También consume respuestas de los suscriptores desde la cola `outgoing.responses`
@@ -73,7 +73,7 @@ Cada bot define reglas de enrutamiento. Ejemplo real:
 ### ¿Qué hace tg-if con esas reglas?
 
 1. Un usuario de Telegram envía un mensaje al bot `chapter-notifier`.
-2. Pyrofork recibe el evento, tg-if lo envuelve como `TelegramEvent`.
+2. PyroTGFork recibe el evento, tg-if lo envuelve como `TelegramEvent`.
 3. El `RulesEngine` evalúa el evento contra las condiciones de cada regla.
 4. Si la condición coincide (ej. `event_type = "command"`), el `RulesEngine` devuelve el `target`.
 5. `EventDispatcher._build_envelope()` arma un **envelope JSON** con todos los datos.
@@ -428,7 +428,7 @@ incoming.events.{bot_name}.{event_type}.{subtype}
 
 ```text
 Usuario escribe /start
-  └─> Pyrofork (MTProto) recibe el mensaje
+  └─> PyroTGFork (MTProto) recibe el mensaje
        └─> tg-if crea TelegramEvent + RoutingContext
             └─> RulesEngine evalúa contra las reglas del bot
                  └─> Coincide: event_type == "command"
@@ -453,7 +453,7 @@ Suscriptor publica en tg-if.responses
                  └─> Consumer de tg-if recibe
                       └─> ResponseConsumer.handle()
                            └─> TelegramClient.send_text(chat_id, "¡Hola!")
-                                └─> Pyrofork envía a Telegram
+                                └─> PyroTGFork envía a Telegram
                                      └─> Usuario ve "¡Hola!"
 ```
 

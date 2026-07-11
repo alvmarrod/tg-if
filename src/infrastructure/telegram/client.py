@@ -149,8 +149,8 @@ class TelegramClient:
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
         reply_markup: list[list[dict[str, str]]] | None = None,
+        **kwargs: Any,
     ) -> Message:
-        kwargs: dict[str, Any] = {}
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
         if reply_to_message_id is not None:
@@ -170,8 +170,10 @@ class TelegramClient:
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
         reply_markup: list[list[dict[str, str]]] | None = None,
+        **kwargs: Any,
     ) -> Message:
-        kwargs: dict[str, Any] = dict(photo=photo, caption=caption)
+        kwargs["photo"] = photo
+        kwargs["caption"] = caption
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
         if reply_to_message_id is not None:
@@ -191,8 +193,10 @@ class TelegramClient:
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
         reply_markup: list[list[dict[str, str]]] | None = None,
+        **kwargs: Any,
     ) -> Message:
-        kwargs: dict[str, Any] = dict(document=document, caption=caption)
+        kwargs["document"] = document
+        kwargs["caption"] = caption
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
         if reply_to_message_id is not None:
@@ -212,8 +216,10 @@ class TelegramClient:
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
         reply_markup: list[list[dict[str, str]]] | None = None,
+        **kwargs: Any,
     ) -> Message:
-        kwargs: dict[str, Any] = dict(video=video, caption=caption)
+        kwargs["video"] = video
+        kwargs["caption"] = caption
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
         if reply_to_message_id is not None:
@@ -233,8 +239,10 @@ class TelegramClient:
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
         reply_markup: list[list[dict[str, str]]] | None = None,
+        **kwargs: Any,
     ) -> Message:
-        kwargs: dict[str, Any] = dict(audio=audio, caption=caption)
+        kwargs["audio"] = audio
+        kwargs["caption"] = caption
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
         if reply_to_message_id is not None:
@@ -253,8 +261,8 @@ class TelegramClient:
         text: str,
         parse_mode: str | None = None,
         reply_markup: list[list[dict[str, str]]] | None = None,
+        **kwargs: Any,
     ) -> Message:
-        kwargs: dict[str, Any] = {}
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
         markup = build_reply_markup(reply_markup)
@@ -273,8 +281,8 @@ class TelegramClient:
         show_alert: bool = False,
         url: str | None = None,
         cache_time: int = 0,
+        **kwargs: Any,
     ) -> bool:
-        kwargs: dict[str, Any] = {}
         if text is not None:
             kwargs["text"] = text
         if url is not None:
@@ -292,6 +300,7 @@ class TelegramClient:
         chat_id: int,
         media: list[dict[str, Any]],
         reply_to_message_id: int | None = None,
+        **kwargs: Any,
     ) -> list[Message]:
         converted: list[InputMediaPhoto | InputMediaVideo] = []
         for item in media:
@@ -304,7 +313,7 @@ class TelegramClient:
                 converted.append(InputMediaVideo(media=m, caption=cap))
         if not converted:
             return []
-        kwargs: dict[str, Any] = dict(media=converted)
+        kwargs["media"] = converted
         if reply_to_message_id is not None:
             kwargs["reply_to_message_id"] = reply_to_message_id
         return await self._client.send_media_group(chat_id=chat_id, **kwargs)

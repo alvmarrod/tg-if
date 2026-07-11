@@ -58,7 +58,7 @@ Consumer                               tg-if
    │                                      │         → extrae file_id del Message
    │                                      │         → actualiza registro
    │                                      │
-   │                                      │── Pyrofork envía a Telegram
+   │                                      │── PyroTGFork envía a Telegram
    │                                      │         └─> Usuario recibe el archivo
 ```
 
@@ -245,7 +245,7 @@ Cuando el `OutgoingResponse` contiene `upl_<hash>`:
 
 2. **Buscar en caché de bytes** (MinIO) por `{bot_id}/{hash}.{ext}`:
    - ¿Existe? → `send_*(chat_id, video=ruta_local)`
-     - Pyrofork sube y envía en una sola operación
+     - PyroTGFork sube y envía en una sola operación
      - Del `Message` retornado extraer `file_id` y `file_unique_id`
      - Actualizar registro: guardar `file_id` y `file_unique_id`
    - ¿No existe? → error definitivo: el upload_id no se reconoce
@@ -254,7 +254,7 @@ Cuando el `OutgoingResponse` contiene `upl_<hash>`:
 
 | Escenario | Acción | Resultado |
 |-----------|--------|-----------|
-| Primera vez que se sube un archivo | Upload a Telegram via Pyrofork | Se obtiene file_id, se guarda |
+| Primera vez que se sube un archivo | Upload a Telegram via PyroTGFork | Se obtiene file_id, se guarda |
 | Mismo archivo, otro chat, otro momento | Se usa file_id directamente | Sin re-upload, respuesta inmediata |
 | file_id expiró o es inválido | Fallback a bytes en MinIO, re-upload | Se obtiene nuevo file_id |
 | MinIO purgado pero file_id válido | Se usa file_id directamente | Funciona sin bytes |
@@ -347,6 +347,6 @@ Archivo > 16 MB o el consumer prefiere no usar inline AMQP
        └─> ResponseConsumer resuelve:
             ├─ file_id existe? → send(chat_id, file_id)  ← sin re-upload a Telegram
             └─ sin file_id?    → send(chat_id, ruta_bytes)
-                                 └─ Pyrofork upload+send
+                                 └─ PyroTGFork upload+send
                                  └─ extrae file_id → guarda para próxima vez
 ```

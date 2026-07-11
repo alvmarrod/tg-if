@@ -50,7 +50,7 @@ Full design: `doc/media_retrieval.md`
 
 ### HTTP File Endpoint (on health server)
 
-- `GET /files/{bot_id}/{file_id}` — streams media on demand via Pyrofork
+- `GET /files/{bot_id}/{file_id}` — streams media on demand via PyroTGFork
 - Checks disk cache first (by `file_unique_id`), falls back to lazy download from Telegram
 - Write-through: lazy downloads populate the cache for subsequent requests
 - Integrated into existing health aiohttp server
