@@ -54,6 +54,7 @@ class ReceiverService:
         self._health_site: Any = None
         self._health_task: asyncio.Task[None] | None = None
         self._last_health: dict[str, bool] = {}
+        self._last_client_health: dict[str, bool] = {}
         self._started = False
         self._running = False
 
@@ -228,6 +229,17 @@ class ReceiverService:
             return
 
         self._disconnect_timers.pop(name, None)
+
+        # Guard: client may have reconnected during the debounce window
+        client = self._clients.get(name)
+        if client is not None and await client.health():
+            logger.info(
+                "client reconnected during debounce window",
+                bot=name,
+                delay=self._debounce_delay,
+            )
+            return
+
         self._disconnect_notified.add(name)
         logger.warning(
             "client disconnected (confirmed)", bot=name, delay=self._debounce_delay
@@ -262,6 +274,16 @@ class ReceiverService:
                 except Exception:
                     logger.exception("health check failed for admin_notifier")
 
+            for name, client in self._clients.items():
+                try:
+                    ok = await client.health()
+                    prev = self._last_client_health.get(name)
+                    if prev is not None and ok != prev:
+                        await self._check_client_transition(name, ok)
+                    self._last_client_health[name] = ok
+                except Exception:
+                    logger.exception("health check failed for client", bot=name)
+
     async def _check_transition(
         self, name: str, current: bool, previous: bool | None
     ) -> None:
@@ -273,6 +295,24 @@ class ReceiverService:
             else AdminSignalType.COMPONENT_DISCONNECTED
         )
         await self._notifier.notify(signal, component=name)
+
+    async def _check_client_transition(self, name: str, connected: bool) -> None:
+        if connected:
+            # Client reconnected — cancel any pending disconnect timer
+            timer = self._disconnect_timers.pop(name, None)
+            if timer is not None and not timer.done():
+                timer.cancel()
+            self._disconnect_notified.discard(name)
+            logger.info("client reconnected", bot=name)
+            if self._notifier:
+                await self._notifier.notify(
+                    AdminSignalType.COMPONENT_CONNECTED, component=name
+                )
+        else:
+            # Client went silent — start debounce if not already running
+            if name not in self._disconnect_timers:
+                timer = asyncio.create_task(self._disconnect_timeout(name))
+                self._disconnect_timers[name] = timer
 
     async def start(self) -> None:
         if self._running:

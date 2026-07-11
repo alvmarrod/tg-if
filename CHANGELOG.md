@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-11
+
+### Fixed
+
+- `on_connect` callback now passed to `PyrogramClient` constructor instead of
+  being called once manually in `start()`. This ensures it fires on every
+  auto-reconnect, properly cancelling the debounced disconnect timer —
+  previously, transient disconnections followed by successful auto-reconnect
+  still sent a "client disconnected" notification to the admin after 5 minutes
+
 ## [0.7.0] - 2026-07-08
 
 ### Changed
