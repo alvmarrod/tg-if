@@ -81,6 +81,7 @@ class MessageEvent(TelegramEvent):
     has_media: bool = False
     is_reply: bool = False
     reply_to_message_id: int | None = None
+    reply_to_message: dict[str, Any] | None = None
     is_forward: bool = False
     file_id: Optional[str] = Field(
         default=None, description="Telegram file_id (session-specific, can download)"
@@ -105,6 +106,7 @@ class CommandEvent(TelegramEvent):
     event_type: EventType = EventType.COMMAND
     message_id: int
     reply_to_message_id: int | None = None
+    reply_to_message: dict[str, Any] | None = None
     command: str = Field(..., description="Command without slash, e.g., 'start'")
     command_args: list[str] = Field(
         default_factory=list, description="Arguments after command"
@@ -132,6 +134,7 @@ class EditedMessageEvent(TelegramEvent):
     has_media: bool = False
     is_reply: bool = False
     reply_to_message_id: int | None = None
+    reply_to_message: dict[str, Any] | None = None
     is_forward: bool = False
     file_id: Optional[str] = Field(
         default=None, description="Telegram file_id (session-specific, can download)"
@@ -156,6 +159,7 @@ class EditedCommandEvent(TelegramEvent):
     event_type: EventType = EventType.EDITED_MESSAGE
     message_id: int
     reply_to_message_id: int | None = None
+    reply_to_message: dict[str, Any] | None = None
     command: str = Field(..., description="Command without slash, e.g., 'start'")
     command_args: list[str] = Field(
         default_factory=list, description="Arguments after command"

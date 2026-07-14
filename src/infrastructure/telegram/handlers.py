@@ -98,11 +98,23 @@ def _extract_from_user(
     }
 
 
+def _extract_reply_to_message(reply: Any) -> dict[str, Any] | None:
+    if reply is None:
+        return None
+    return {
+        "message_id": reply.id,
+        "from": _extract_from_user(reply.from_user),
+        "text": reply.text or "",
+        "caption": reply.caption or "",
+    }
+
+
 def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEvent:
     command, args = _detect_command(message.text)
 
     from_user = _extract_from_user(message.from_user)
     reply_to_message_id = message.reply_to_message_id
+    reply_to_message = _extract_reply_to_message(message.reply_to_message)
 
     if command is not None:
         return CommandEvent(
@@ -113,6 +125,7 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
             from_user=from_user,
             message_id=message.id,
             reply_to_message_id=reply_to_message_id,
+            reply_to_message=reply_to_message,
             command=command,
             command_args=args,
             text=message.text or "",
@@ -136,6 +149,7 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
         from_user=from_user,
         message_id=message.id,
         reply_to_message_id=reply_to_message_id,
+        reply_to_message=reply_to_message,
         text=message.text,
         caption=message.caption,
         has_media=has_media,
@@ -155,6 +169,7 @@ def edited_message_to_event(
 
     from_user = _extract_from_user(message.from_user)
     reply_to_message_id = message.reply_to_message_id
+    reply_to_message = _extract_reply_to_message(message.reply_to_message)
 
     if command is not None:
         return EditedCommandEvent(
@@ -165,6 +180,7 @@ def edited_message_to_event(
             from_user=from_user,
             message_id=message.id,
             reply_to_message_id=reply_to_message_id,
+            reply_to_message=reply_to_message,
             command=command,
             command_args=args,
             text=message.text or "",
@@ -188,6 +204,7 @@ def edited_message_to_event(
         from_user=from_user,
         message_id=message.id,
         reply_to_message_id=reply_to_message_id,
+        reply_to_message=reply_to_message,
         text=message.text,
         caption=message.caption,
         has_media=has_media,

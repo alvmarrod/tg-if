@@ -273,6 +273,7 @@ class TestEventDispatcher:
         args, _ = mock_publisher.publish.await_args
         envelope = args[1]
         assert envelope["reply_to_message_id"] == 42
+        assert envelope["reply_to_message"] is None
         assert envelope["routing_context"]["is_reply"] is True
 
     async def test_dispatch_edited_message_has_expected_structure(

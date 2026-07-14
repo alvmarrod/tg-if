@@ -48,6 +48,7 @@ All events share these top-level fields:
 | `command_args` | array of strings or null | Arguments after the command; `null` for non-command events |
 | `from_user` | object or null | Sender info: `id`, `is_bot`, `first_name`, `last_name`, `username`, `language_code` |
 | `reply_to_message_id` | integer or null | The message ID this event is replying to; `null` if not a reply |
+| `reply_to_message` | object or null | The replied-to message: `message_id`, `from` (user dict), `text`, `caption`; `null` if not a reply |
 | `routing_context` | object | Context used for routing decisions (chat_type, command, has_media, media_type, user_role, is_reply, is_forward) |
 | `payload` | object | Raw Telegram data (file metadata for media; `{}` for text/commands) |
 
@@ -86,6 +87,7 @@ Example:
     "language_code": "en"
   },
   "reply_to_message_id": null,
+  "reply_to_message": null,
   "routing_context": {
     "chat_type": "private",
     "command": "start",
@@ -130,6 +132,7 @@ Example (edited command):
     "language_code": "en"
   },
   "reply_to_message_id": null,
+  "reply_to_message": null,
   "routing_context": {
     "chat_type": "private",
     "command": "start",
@@ -172,6 +175,7 @@ When `event_type` is `"callback_query"`, the envelope includes two additional to
     "language_code": "en"
   },
   "reply_to_message_id": null,
+  "reply_to_message": null,
   "routing_context": {
     "chat_type": "private"
   },
