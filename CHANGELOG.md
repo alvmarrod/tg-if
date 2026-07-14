@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-07-14
+
+### Fixed
+
+- `POST /upload/{bot_id}` now validates required headers before multipart
+  parsing. Returns 400 with structured JSON when `Content-Type` is absent or
+  wrong — instead of crashing with `KeyError`
+
 ## [0.9.1] - 2026-07-11
 
 ### Fixed

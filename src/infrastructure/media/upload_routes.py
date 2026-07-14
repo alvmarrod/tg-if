@@ -23,6 +23,25 @@ MaxUploadSizeKey: AppKey[int] = AppKey("max_upload_size")
 logger = structlog.get_logger()
 
 
+_REQUIRED_HEADERS: set[str] = {"Content-Type"}
+
+
+def _validate_upload_request(request: web.Request) -> web.Response | None:
+    missing = _REQUIRED_HEADERS - set(request.headers)
+    if missing:
+        return web.json_response(
+            {"error": "missing required headers", "missing": list(missing)},
+            status=400,
+        )
+    ct = request.headers.get("Content-Type", "")
+    if not ct.startswith("multipart/form-data"):
+        return web.json_response(
+            {"error": "Content-Type must be multipart/form-data"},
+            status=400,
+        )
+    return None
+
+
 _CT_TO_EXT: dict[str, str] = {
     "image/jpeg": "jpg",
     "image/png": "png",
@@ -73,6 +92,10 @@ async def handle_upload_post(request: web.Request) -> web.Response:
 
     if bot_id not in client_map:
         return web.json_response({"error": f"unknown bot: {bot_id}"}, status=404)
+
+    error = _validate_upload_request(request)
+    if error is not None:
+        return error
 
     reader = await request.multipart()
     part = await reader.next()
