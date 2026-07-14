@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-07-14
+
+### Fixed
+
+- `TCP.TIMEOUT` increased from 10s to 30s to match the 15s `PING_INTERVAL`.
+  Previously, socket reads timed out after 10s of inactivity, but keepalive
+  pings only arrived every 15s — causing a rapid disconnect/reconnect cycle
+  every ~10 seconds for all clients
+
 ## [0.9.2] - 2026-07-14
 
 ### Fixed

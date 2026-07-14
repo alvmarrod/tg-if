@@ -3,6 +3,7 @@ from typing import Any, cast
 
 import pyrogram
 import pyrogram.connection.connection  # noqa: F811
+import pyrogram.connection.transport.tcp  # noqa: F811
 import pyrogram.session.session  # noqa: F811
 import structlog
 from pyrogram.client import Client as PyrogramClient
@@ -29,6 +30,8 @@ from infrastructure.telegram.handlers import (
 pyrogram.session.session.Session.PING_INTERVAL = 15  # 5s → 15s
 pyrogram.session.session.Session.WAIT_TIMEOUT = 30  # 15s → 30s
 pyrogram.connection.connection.Connection.MAX_RETRIES = 5  # 3 → 5
+_tcp_cls = pyrogram.connection.transport.tcp.TCP  # type: ignore[attr-defined]
+_tcp_cls.TIMEOUT = 30  # 10s → 30s (must be >= PING_INTERVAL)
 
 
 logger = structlog.get_logger()
