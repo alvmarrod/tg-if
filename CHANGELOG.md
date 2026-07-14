@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-07-14
+
+### Added
+
+- `reply_to_message` field in incoming event envelopes. Now includes the replied-to
+  message's `message_id`, `from` (user dict), `text`, and `caption` — so subscribers
+  like gamification can identify who was replied to without an extra API call
+
 ## [0.9.3] - 2026-07-14
 
 ### Fixed

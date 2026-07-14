@@ -125,6 +125,7 @@ class EventDispatcher:
             "command_args": getattr(event, "command_args", None),
             "from_user": event.from_user,
             "reply_to_message_id": getattr(event, "reply_to_message_id", None),
+            "reply_to_message": getattr(event, "reply_to_message", None),
             "routing_context": context.model_dump(),
             "payload": event.raw_payload,
         }
