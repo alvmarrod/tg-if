@@ -95,6 +95,56 @@ class TestHandleUploadPost:
             data = await resp.json()
             assert "unknown bot" in data["error"]
 
+    async def test_missing_content_type_header(
+        self, reg_and_storage: tuple[UploadRegistry, MagicMock, TemporaryDirectory[str]]
+    ) -> None:
+        reg, storage, tmp = reg_and_storage
+        try:
+            app = _make_app(
+                registry=reg,
+                storage=storage,
+                client_map={"aibot": MagicMock()},
+            )
+            client = TestClient(TestServer(app))
+            async with client:
+                resp = await client.post(
+                    "/upload/aibot",
+                    data=b"some data",
+                    headers={},
+                    skip_auto_headers={"Content-Type"},
+                )
+                assert resp.status == 400
+                data = await resp.json()
+                assert "missing required headers" in data["error"]
+                assert "Content-Type" in data["missing"]
+        finally:
+            reg.close()
+            tmp.cleanup()
+
+    async def test_wrong_content_type(
+        self, reg_and_storage: tuple[UploadRegistry, MagicMock, TemporaryDirectory[str]]
+    ) -> None:
+        reg, storage, tmp = reg_and_storage
+        try:
+            app = _make_app(
+                registry=reg,
+                storage=storage,
+                client_map={"aibot": MagicMock()},
+            )
+            client = TestClient(TestServer(app))
+            async with client:
+                resp = await client.post(
+                    "/upload/aibot",
+                    data=b"some data",
+                    headers={"Content-Type": "application/json"},
+                )
+                assert resp.status == 400
+                data = await resp.json()
+                assert "multipart/form-data" in data["error"]
+        finally:
+            reg.close()
+            tmp.cleanup()
+
     async def test_missing_file_field(
         self, reg_and_storage: tuple[UploadRegistry, MagicMock, TemporaryDirectory[str]]
     ) -> None:
