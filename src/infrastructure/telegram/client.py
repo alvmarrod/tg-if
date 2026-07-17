@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, cast
 
 import pyrogram
@@ -8,6 +9,7 @@ import pyrogram.session.session  # noqa: F811
 import structlog
 from pyrogram.client import Client as PyrogramClient
 from pyrogram.enums import ParseMode
+from pyrogram.errors import BadMsgNotification
 from pyrogram.handlers.disconnect_handler import DisconnectHandler
 from pyrogram.types import BotCommand, InputMediaPhoto, InputMediaVideo, Message
 
@@ -55,19 +57,24 @@ class TelegramClient:
     ) -> None:
         self._bot_id = config.name
         self._bot_token = config.bot_token
+        self._config = config
         self._event_callback = event_callback
         self._on_connect_cb = on_connect
         self._on_disconnect_cb = on_disconnect
         name, workdir = parse_session_path(config.session_file)
-        kwargs: dict[str, Any] = dict(
+        self._client_kwargs: dict[str, Any] = dict(
             name=name,
             api_id=config.api_id,
             api_hash=config.api_hash,
             workdir=workdir,
         )
         if config.bot_token is not None:
-            kwargs["bot_token"] = config.bot_token
-        self._client = PyrogramClient(**kwargs)
+            self._client_kwargs["bot_token"] = config.bot_token
+        self._init_client()
+        self._known_chats: dict[int, dict[str, Any]] = {}
+
+    def _init_client(self) -> None:
+        self._client = PyrogramClient(**self._client_kwargs)
         self._client.on_message()(self._on_message)
         self._client.on_edited_message()(self._on_edited_message)
         self._client.on_callback_query()(self._on_callback_query)
@@ -76,7 +83,6 @@ class TelegramClient:
             self._on_message_reaction_count_updated
         )
         self._client.add_handler(DisconnectHandler(self._on_disconnect_handler))
-        self._known_chats: dict[int, dict[str, Any]] = {}
 
     @property
     def bot_id(self) -> str:
@@ -113,6 +119,29 @@ class TelegramClient:
         try:
             await self._client.start()
             await self._on_connect_handler()
+        except BadMsgNotification as e:
+            msg = str(e)
+            if not msg.startswith("[16]"):
+                raise
+            name, workdir = parse_session_path(self._config.session_file)
+            session_path = Path(workdir) / f"{name}.session"
+            logger.warning(
+                "stale session detected, resetting",
+                bot=self._bot_id,
+                path=str(session_path),
+            )
+            if session_path.exists():
+                session_path.unlink()
+            try:
+                self._init_client()
+                await self._client.start()
+                await self._on_connect_handler()
+            except Exception:
+                logger.warning(
+                    "telegram client failed to start after session reset",
+                    bot=self._bot_id,
+                    exc_info=True,
+                )
         except Exception:
             logger.warning(
                 "telegram client failed to start", bot=self._bot_id, exc_info=True

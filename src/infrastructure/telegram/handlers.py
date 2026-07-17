@@ -234,12 +234,12 @@ def reaction_updated_to_event(
     old_reaction = getattr(reaction, "old_reaction", []) or []
 
     return MessageReactionUpdatedEvent(
-        event_id=f"ru_{reaction.id}_{getattr(reaction, 'date', 0)}",
+        event_id=f"ru_{reaction.message_id}_{getattr(reaction, 'date', 0)}",
         bot_id=bot_id,
         chat_id=reaction.chat.id if reaction.chat else 0,
         user_id=from_user["id"] if from_user else 0,
         from_user=from_user,
-        message_id=reaction.id,
+        message_id=reaction.message_id,
         reaction_emoji=_extract_reaction_emoji(new_reaction),
         old_reaction_emoji=_extract_reaction_emoji(old_reaction) or None,
         raw_payload={},
