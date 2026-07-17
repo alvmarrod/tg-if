@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-07-16
+
+### Fixed
+
+- `reaction.id` → `reaction.message_id` in `reaction_updated_to_event`. Pyrogram's
+  `MessageReactionUpdated` type does not have an `.id` attribute — caused
+  `AttributeError` crashes on reaction events
+- Stale session recovery: when `BadMsgNotification [16]` (msg_id too low) occurs
+  during client start, the stale `.session` file is now deleted and the client
+  re-initialized with a fresh session — avoids permanent client failure after
+  clock drifts or container restarts
+
 ## [0.9.4] - 2026-07-14
 
 ### Added
