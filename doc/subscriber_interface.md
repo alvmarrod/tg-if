@@ -225,6 +225,7 @@ When `event_type` is `"callback_query"`, the envelope includes two additional to
 | `audio` | `audio` | `caption`, `parse_mode`, `reply_to_message_id`, `reply_markup` | Any PyroTGFork `send_audio` kwarg is accepted |
 | `media_group` | `media` (list of `{type, media, caption?}`) | `reply_to_message_id` | Any PyroTGFork `send_media_group` kwarg is accepted |
 | `edit_message_text` | `message_id`, `text` | `parse_mode`, `reply_markup` | Edits an existing message; any PyroTGFork `edit_message_text` kwarg is accepted |
+| `edit_message_reply_markup` | `message_id`, `reply_markup` | --- | Edits only the inline keyboard of a message. `chat_id` is forwarded automatically. |
 | `answer_callback_query` | `callback_query_id` | `text`, `show_alert`, `url`, `cache_time` | `chat_id` is **not forwarded**; any PyroTGFork `answer_callback_query` kwarg is accepted |
 | `delete_message` | `message_ids` (int or list[int]) | `revoke` | Calls `delete_messages` on PyroTGFork. `chat_id` is forwarded automatically. |
 
@@ -235,6 +236,7 @@ Inline button interactions involve two responses:
 1. Subscriber receives a `callback_query` event with `callback_id`, `callback_data`, `message_id`, `chat_id` as top-level fields
 2. Subscriber publishes `answer_callback_query` using `callback_id` as `callback_query_id` to show a toast notification
 3. Subscriber publishes `edit_message_text` using `message_id` and `chat_id` to update the button message
+4. To update only the keyboard (without touching text), use `edit_message_reply_markup` instead
 
 ```json
 [
@@ -243,9 +245,12 @@ Inline button interactions involve two responses:
     "payload": { "callback_query_id": "cq_99", "text": "Processing...", "show_alert": false }
   },
   {
-    "response_type": "edit_message_text",
+    "response_type": "edit_message_reply_markup",
     "chat_id": 12345,
-    "payload": { "message_id": 42, "text": "Done!" }
+    "payload": {
+      "message_id": 42,
+      "reply_markup": [[{"text": "Done", "callback_data": "done"}]]
+    }
   }
 ]
 ```

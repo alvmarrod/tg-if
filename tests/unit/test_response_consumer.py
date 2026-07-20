@@ -21,6 +21,7 @@ class MockClient:
         self.send_audio = AsyncMock()
         self.send_media_group = AsyncMock()
         self.edit_message_text = AsyncMock()
+        self.edit_message_reply_markup = AsyncMock()
         self.answer_callback_query = AsyncMock()
         self.delete_message = AsyncMock()
 
@@ -163,6 +164,32 @@ class TestResponseConsumer:
 
         mock_clients["aibot"].edit_message_text.assert_awaited_once_with(
             chat_id=12345, message_id=42, text="Updated!"
+        )
+
+    async def test_handle_edit_message_reply_markup_response(
+        self,
+        consumer: ResponseConsumer,
+        mock_clients: dict[str, Any],
+    ) -> None:
+        body = {
+            "response_id": "resp_erm_1",
+            "correlation_id": "evt_erm_1",
+            "timestamp": "2025-01-01T00:00:00",
+            "bot_id": "aibot",
+            "chat_id": 12345,
+            "response_type": "edit_message_reply_markup",
+            "payload": {
+                "message_id": 42,
+                "reply_markup": [[{"text": "Click", "callback_data": "cb_1"}]],
+            },
+        }
+
+        await consumer.handle(body)
+
+        mock_clients["aibot"].edit_message_reply_markup.assert_awaited_once_with(
+            chat_id=12345,
+            message_id=42,
+            reply_markup=[[{"text": "Click", "callback_data": "cb_1"}]],
         )
 
     async def test_handle_answer_callback_query_response(

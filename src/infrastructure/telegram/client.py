@@ -306,6 +306,21 @@ class TelegramClient:
         assert result is not None
         return result
 
+    async def edit_message_reply_markup(
+        self,
+        chat_id: int,
+        message_id: int,
+        reply_markup: list[list[dict[str, str]]] | None = None,
+    ) -> Message:
+        markup = build_reply_markup(reply_markup)
+        result = await self._client.edit_message_reply_markup(
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=markup,  # type: ignore[arg-type]
+        )
+        assert result is not None
+        return result
+
     async def answer_callback_query(
         self,
         callback_query_id: str,
