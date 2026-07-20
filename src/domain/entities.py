@@ -236,7 +236,7 @@ class OutgoingResponse(BaseModel):
     chat_id: int
     response_type: str = Field(
         ...,
-        description="send method: text, photo, document, video, audio, media_group, edit_message_text, answer_callback_query, delete_message",
+        description="send method: text, photo, document, video, audio, media_group, edit_message_text, edit_message_reply_markup, answer_callback_query, delete_message",
     )
     payload: dict[str, Any] = Field(
         default_factory=dict, description="kwargs forwarded to the send method"

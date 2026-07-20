@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-20
+
+### Added
+
+- `edit_message_reply_markup` response type. Subscribers can now update only the
+  inline keyboard of a message without retransmitting the text — the previously
+  necessary workaround of passing the same text via `edit_message_text`.
+
 ## [0.9.5] - 2026-07-16
 
 ### Fixed
