@@ -180,7 +180,7 @@ class TelegramClient:
         text: str,
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
-        reply_markup: list[list[dict[str, str]]] | None = None,
+        reply_markup: list[list[dict[str, Any]]] | None = None,
         **kwargs: Any,
     ) -> Message:
         if parse_mode is not None:
@@ -201,7 +201,7 @@ class TelegramClient:
         caption: str = "",
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
-        reply_markup: list[list[dict[str, str]]] | None = None,
+        reply_markup: list[list[dict[str, Any]]] | None = None,
         **kwargs: Any,
     ) -> Message:
         kwargs["photo"] = photo
@@ -224,7 +224,7 @@ class TelegramClient:
         caption: str = "",
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
-        reply_markup: list[list[dict[str, str]]] | None = None,
+        reply_markup: list[list[dict[str, Any]]] | None = None,
         **kwargs: Any,
     ) -> Message:
         kwargs["document"] = document
@@ -247,7 +247,7 @@ class TelegramClient:
         caption: str = "",
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
-        reply_markup: list[list[dict[str, str]]] | None = None,
+        reply_markup: list[list[dict[str, Any]]] | None = None,
         **kwargs: Any,
     ) -> Message:
         kwargs["video"] = video
@@ -270,7 +270,7 @@ class TelegramClient:
         caption: str = "",
         parse_mode: str | None = None,
         reply_to_message_id: int | None = None,
-        reply_markup: list[list[dict[str, str]]] | None = None,
+        reply_markup: list[list[dict[str, Any]]] | None = None,
         **kwargs: Any,
     ) -> Message:
         kwargs["audio"] = audio
@@ -292,7 +292,7 @@ class TelegramClient:
         message_id: int,
         text: str,
         parse_mode: str | None = None,
-        reply_markup: list[list[dict[str, str]]] | None = None,
+        reply_markup: list[list[dict[str, Any]]] | None = None,
         **kwargs: Any,
     ) -> Message:
         if parse_mode is not None:
@@ -310,7 +310,7 @@ class TelegramClient:
         self,
         chat_id: int,
         message_id: int,
-        reply_markup: list[list[dict[str, str]]] | None = None,
+        reply_markup: list[list[dict[str, Any]]] | None = None,
     ) -> Message:
         markup = build_reply_markup(reply_markup)
         result = await self._client.edit_message_reply_markup(

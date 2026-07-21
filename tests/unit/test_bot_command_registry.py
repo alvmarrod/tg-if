@@ -169,3 +169,34 @@ class TestBotCommandRegistry:
         # svc_1's registration persists; only start from svc_1
         assert len(merged) == 1
         assert merged[0]["description"] == "Start"
+
+    def test_hyphen_in_command_normalized_and_stored(self) -> None:
+        registry = BotCommandRegistry()
+        result = registry.register(
+            "aibot",
+            "svc_1",
+            [{"command": "gb-start", "description": "Start"}],
+        )
+        assert result.status == "ok"
+        assert result.registered == ["gb-start"]
+        merged = registry.get_commands("aibot")
+        assert merged[0]["command"] == "gb_start"
+
+    def test_uppercase_command_rejected(self) -> None:
+        registry = BotCommandRegistry()
+        result = registry.register(
+            "aibot",
+            "svc_1",
+            [{"command": "GBStart", "description": "Start"}],
+        )
+        assert result.status == "nok"
+        assert "GBStart" in result.conflicts[0]
+
+    def test_special_chars_command_rejected(self) -> None:
+        registry = BotCommandRegistry()
+        result = registry.register(
+            "aibot",
+            "svc_1",
+            [{"command": "gb/start", "description": "Start"}],
+        )
+        assert result.status == "nok"

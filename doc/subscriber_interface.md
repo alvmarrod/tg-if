@@ -353,6 +353,13 @@ Precedence: user > chat > global. Last-added rule wins at same scope.
 
 **Queue:** `subscriber-commands` — durable, bound with routing key `"subscriber-commands"`
 
+> **Command naming rules:** Command names may only contain lowercase letters (`a-z`),
+> digits (`0-9`), and underscores (`_`). Hyphens are automatically converted to
+> underscores when stored. Incoming commands from Telegram users also normalize
+> hyphens to underscores — both `/gb-start` and `/gb_start` produce
+> `command: "gb_start"` in the event envelope. This convention ensures
+> compatibility with Telegram's Bot API while accepting both forms from users.
+
 ### Request — Register
 
 ```json

@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-21
+
+### Added
+
+- `web_app` button type support in `build_reply_markup()`. Inline keyboards can
+  now include `{"text": "...", "web_app": {"url": "..."}}` buttons.
+- Command validation in `BotCommandRegistry.register()`: commands with uppercase
+  letters or special characters are rejected with a conflict error.
+
+### Changed
+
+- Hyphens (`-`) in bot commands are now normalized to underscores (`_`) in both
+  incoming event detection (`_detect_command`) and registry storage. Subscribers
+  can register `/gb-start` and users can type `/gb-start` or `/gb_start` — both
+  produce `command: "gb_start"` in the event envelope. Telegram's Bot API only
+  accepts lowercase alphanumeric+underscore names, so `set_bot_commands` now
+  receives the normalized form.
+
 ## [0.10.0] - 2026-07-20
 
 ### Added
