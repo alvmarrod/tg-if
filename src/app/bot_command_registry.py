@@ -1,7 +1,15 @@
+import re
+
 from domain.entities import (
     BotCommandRegistration,
     SubscriberCommandResponse,
 )
+
+_VALID_COMMAND_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+
+
+def _normalize_command(name: str) -> str:
+    return name.replace("-", "_")
 
 
 class BotCommandRegistry:
@@ -14,15 +22,37 @@ class BotCommandRegistry:
         subscriber_id: str,
         commands: list[dict[str, str]],
     ) -> SubscriberCommandResponse:
-        incoming_names = {c["command"] for c in commands if "command" in c}
+        normalized: list[dict[str, str]] = []
+        original_names: set[str] = set()
+        for cmd in commands:
+            if "command" not in cmd:
+                normalized.append(cmd)
+                continue
+            original = cmd["command"]
+            original_names.add(original)
+            new_cmd = dict(cmd)
+            new_cmd["command"] = _normalize_command(original)
+            normalized.append(new_cmd)
+
+        incoming_names = {c["command"] for c in normalized if "command" in c}
         if not incoming_names:
             return SubscriberCommandResponse(
                 status="nok",
                 conflicts=["no valid commands provided (missing 'command' key)"],
             )
 
-        bot_regs = self._registrations.get(bot_id, {})
         conflicts: list[str] = []
+        for name in sorted(incoming_names):
+            if not _VALID_COMMAND_RE.match(name):
+                conflicts.append(
+                    f"command '{name}' is invalid — only lowercase "
+                    f"letters, digits, and underscores allowed"
+                )
+
+        if conflicts:
+            return SubscriberCommandResponse(status="nok", conflicts=conflicts)
+
+        bot_regs = self._registrations.get(bot_id, {})
         for other_id, other_reg in bot_regs.items():
             if other_id == subscriber_id:
                 continue
@@ -37,10 +67,10 @@ class BotCommandRegistry:
             return SubscriberCommandResponse(status="nok", conflicts=conflicts)
 
         self._registrations.setdefault(bot_id, {})[subscriber_id] = (
-            BotCommandRegistration(subscriber_id=subscriber_id, commands=commands)
+            BotCommandRegistration(subscriber_id=subscriber_id, commands=normalized)
         )
 
-        return SubscriberCommandResponse(status="ok", registered=sorted(incoming_names))
+        return SubscriberCommandResponse(status="ok", registered=sorted(original_names))
 
     def deregister(
         self,

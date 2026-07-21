@@ -80,6 +80,7 @@ def _detect_command(text: str | None) -> tuple[str | None, list[str]]:
         return None, []
     parts = text.split()
     raw = parts[0].lstrip("/").split("@")[0]
+    raw = raw.replace("-", "_")
     return raw, parts[1:]
 
 
@@ -327,20 +328,34 @@ def extract_routing_context(message: Message) -> RoutingContext:
 
 
 def build_reply_markup(
-    buttons: list[list[dict[str, str]]] | None,
+    buttons: list[list[dict[str, Any]]] | None,
 ) -> InlineKeyboardMarkup | None:
     if not buttons:
         return None
+    from pyrogram.types import WebAppInfo
+
     rows: list[list[InlineKeyboardButton]] = []
     for row in buttons:
-        keyboard_row = [
-            InlineKeyboardButton(
-                text=btn["text"], callback_data=btn.get("callback_data") or ""
-            )
-            if "callback_data" in btn
-            else InlineKeyboardButton(text=btn["text"], url=btn.get("url") or "")
-            for btn in row
-        ]
+        keyboard_row: list[InlineKeyboardButton] = []
+        for btn in row:
+            if "web_app" in btn:
+                keyboard_row.append(
+                    InlineKeyboardButton(
+                        text=btn["text"],
+                        web_app=WebAppInfo(url=btn["web_app"]["url"]),
+                    )
+                )
+            elif "callback_data" in btn:
+                keyboard_row.append(
+                    InlineKeyboardButton(
+                        text=btn["text"],
+                        callback_data=btn.get("callback_data") or "",
+                    )
+                )
+            else:
+                keyboard_row.append(
+                    InlineKeyboardButton(text=btn["text"], url=btn.get("url") or "")
+                )
         rows.append(keyboard_row)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

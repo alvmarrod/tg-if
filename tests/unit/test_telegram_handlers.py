@@ -30,6 +30,12 @@ class TestDetectCommand:
         assert cmd == ""
         assert args == []
 
+    def test_command_with_hyphen_normalized_to_underscore(self) -> None:
+        assert _detect_command("/gb-start") == ("gb_start", [])
+
+    def test_command_with_hyphen_and_args(self) -> None:
+        assert _detect_command("/gb-start foo bar") == ("gb_start", ["foo", "bar"])
+
 
 class TestParseSessionPath:
     def test_simple_path(self) -> None:
