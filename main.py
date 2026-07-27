@@ -1,20 +1,21 @@
 import asyncio
 import signal
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 import structlog
 
 from app.log_buffer import LogBuffer
 from app.receiver_service import ReceiverService
-from infrastructure.config import ConfigLoader
+from infrastructure.config import AppConfig, ConfigLoader
 
 
 async def main() -> None:
-    config = ConfigLoader.load()
-    log_buffer = LogBuffer()
+    config: AppConfig | None = ConfigLoader.load()
+    if config is None:
+        print("Error: Failed to load configuration")
+        sys.exit(1)
+
+    log_buffer: LogBuffer = LogBuffer()
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt="iso"),
@@ -25,12 +26,16 @@ async def main() -> None:
     )
     logger = structlog.get_logger()
 
-    service = ReceiverService(config, log_buffer=log_buffer)
+    service: ReceiverService = ReceiverService(config, log_buffer=log_buffer)
     await service.start()
-    logger.info("starting", version="0.1.0", bots=[b.name for b in config.bots])
+    logger.info(
+        "starting",
+        version="0.1.0",
+        bots=[b.name for b in config.bots or []],
+    )
 
-    stop_event = asyncio.Event()
-    loop = asyncio.get_running_loop()
+    stop_event: asyncio.Event = asyncio.Event()
+    loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop_event.set)
 
