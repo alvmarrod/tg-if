@@ -47,7 +47,7 @@ EventCallback = Callable[[TelegramEvent, RoutingContext], Awaitable[None]]
 def _parse_mode(value: str | None) -> ParseMode | None:
     if value is None:
         return None
-    return ParseMode(value.upper())
+    return ParseMode(value)
 
 
 class TelegramClient:
@@ -329,11 +329,10 @@ class TelegramClient:
         reply_markup: list[list[dict[str, Any]]] | None = None,
     ) -> Message:
         markup = build_reply_markup(reply_markup)
-        result = await self._client.edit_message_reply_markup(
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=markup,
-        )
+        kwargs: dict[str, Any] = dict(chat_id=chat_id, message_id=message_id)
+        if markup is not None:
+            kwargs["reply_markup"] = markup
+        result = await self._client.edit_message_reply_markup(**kwargs)
         if result is None:
             raise RuntimeError("edit_message_reply_markup returned None")
         return result

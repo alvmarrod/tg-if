@@ -340,7 +340,9 @@ def extract_routing_context(message: Message) -> RoutingContext:
 
 def build_reply_markup(
     buttons: list[list[dict[str, Any]]] | None,
-) -> InlineKeyboardMarkup:
+) -> InlineKeyboardMarkup | None:
+    if buttons is None:
+        return None
     if not buttons:
         raise ValueError("build_reply_markup requires non-empty buttons list")
 

@@ -259,3 +259,63 @@ class TestOnEvent:
 
         with pytest.raises(RuntimeError, match="dl failed"):
             await svc._on_event(event, MagicMock())
+
+
+class TestOnResponseFailed:
+    async def test_notifies_when_notifier_set(self, tmp_path: Path) -> None:
+        svc = ReceiverService(_cfg(tmp_path))
+        svc._metrics.response_failed = MagicMock()
+        svc._notifier = AsyncMock()
+        body = {"error": "test"}
+        exc = RuntimeError("fail")
+        await svc._on_response_failed(body, exc)
+        svc._notifier.notify.assert_awaited_once()
+
+    async def test_no_notifier_does_not_crash(self, tmp_path: Path) -> None:
+        svc = ReceiverService(_cfg(tmp_path))
+        svc._metrics.response_failed = MagicMock()
+        svc._notifier = None
+        await svc._on_response_failed({"e": "x"}, RuntimeError("fail"))
+
+
+class TestOnMediaConfigMessage:
+    async def test_valid_rule(self, tmp_path: Path) -> None:
+        svc = ReceiverService(_cfg(tmp_path))
+        svc._media_config.add_rule = MagicMock()
+        body = {
+            "scope": "global",
+            "scope_id": None,
+            "content_types": ["photo"],
+            "action": "eager",
+        }
+        await svc._on_media_config_message(body)
+        svc._media_config.add_rule.assert_called_once()
+
+    async def test_invalid_rule_with_notifier(self, tmp_path: Path) -> None:
+        svc = ReceiverService(_cfg(tmp_path))
+        svc._media_config.add_rule = MagicMock(side_effect=ValueError("bad rule"))
+        svc._notifier = AsyncMock()
+        await svc._on_media_config_message({"bad": "data"})
+        svc._notifier.notify.assert_awaited_once()
+
+
+class TestClientConnectionHandlers:
+    async def test_on_client_connected(self, tmp_path: Path) -> None:
+        svc = ReceiverService(_cfg(tmp_path))
+        svc._disconnect_timers["testbot"] = AsyncMock()
+        await svc._on_client_connected("testbot")
+        assert "testbot" not in svc._disconnect_timers
+
+    async def test_on_client_connected_no_timer(self, tmp_path: Path) -> None:
+        svc = ReceiverService(_cfg(tmp_path))
+        await svc._on_client_connected("testbot")
+
+    async def test_on_client_disconnected_first(self, tmp_path: Path) -> None:
+        svc = ReceiverService(_cfg(tmp_path))
+        await svc._on_client_disconnected("testbot")
+        assert "testbot" in svc._disconnect_timers
+
+    async def test_on_client_disconnected_already_timed(self, tmp_path: Path) -> None:
+        svc = ReceiverService(_cfg(tmp_path))
+        svc._disconnect_timers["testbot"] = AsyncMock()
+        await svc._on_client_disconnected("testbot")

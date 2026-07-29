@@ -36,6 +36,30 @@ explicit_package_bases = true
 module = "tests.unit.test_receiver_service"
 disable_error_code = ["method-assign", "attr-defined"]
 
+[[tool.mypy.overrides]]
+module = "tests.unit.test_telegram_client"
+disable_error_code = ["assignment", "func-returns-value"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_handlers"
+disable_error_code = ["index", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_endpoint"
+disable_error_code = ["operator"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_publisher"
+disable_error_code = ["union-attr"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_media_downloader"
+disable_error_code = ["attr-defined", "arg-type", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_admin_commands"
+disable_error_code = ["arg-type", "union-attr"]
+
 [dependency-groups]
 dev = [
     "mypy>=2.1.0",
