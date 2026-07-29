@@ -90,7 +90,7 @@ jobs:
       - run: uv run pytest --cov=src --cov-report=json --cov-report= -q
       - run: python badges/gen_badges.py --skip-tests
       - run: rm -f coverage.json
-      - uses: stefanzweifel/git-auto-commit-action@v5
+      - uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore: update coverage badges [skip ci]"
           file_pattern: "badges/*.json"
