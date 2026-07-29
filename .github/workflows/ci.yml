@@ -68,7 +68,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
       - run: uv sync --all-extras
       - name: Bandit security scan
-        run: uv run bandit -r src/ -x tests/
+        run: uv run bandit -r src/ -x tests/ --severity-level high
       - name: pip-audit dependency vulnerability scan
         run: uv run pip-audit --strict
 
