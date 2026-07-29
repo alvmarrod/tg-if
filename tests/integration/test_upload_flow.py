@@ -165,10 +165,16 @@ class TestUploadIntegration:
             assert isinstance(kwargs["photo"], str)
             assert not kwargs["photo"].startswith("upl_")
 
-            # After send, file_id was extracted and registry updated
+            # After send, consumer must finish _update_after_send before
+            # the registry reflects the extracted file_id.
             content_hash = upload_id[4:]
-            entry = await reg.get_by_hash(content_hash)
-            assert entry is not None
+            for _ in range(50):
+                entry = await reg.get_by_hash(content_hash)
+                if entry is not None and entry.file_id is not None:
+                    break
+                await asyncio.sleep(0.1)
+            else:
+                raise AssertionError("timed out waiting for file_id update")
             assert entry.file_id == "AgAC_test"
             assert entry.file_unique_id == "QQAD_test"
         finally:
