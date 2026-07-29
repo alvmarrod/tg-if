@@ -4,9 +4,10 @@ import asyncio
 import json
 import os
 import time
+from collections.abc import Mapping
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Mapping
 from typing import Any
 
 import structlog
@@ -529,105 +530,105 @@ class ChatExportEngine:
         media_dir.mkdir(parents=True, exist_ok=True)
 
         semaphore = asyncio.Semaphore(parallelism)
-        open_files: dict[str, Any] = {}
 
         processed = 0
         media_count = 0
         media_bytes = 0
 
         offset_id = start_offset_id
-        while True:
-            if self._cancelled.is_set():
-                return
-            await self._paused.wait()
-
-            page = await client.get_chat_history(
-                chat_id, limit=100, offset_id=offset_id
-            )
-            if not page:
-                break
-
-            for msg in page:
+        with ExitStack() as stack:
+            open_files: dict[str, Any] = {}
+            while True:
                 if self._cancelled.is_set():
                     return
+                await self._paused.wait()
 
-                if since_msg_id is not None and msg.id < since_msg_id:
-                    continue
-                if since_date and msg.date and msg.date < since_date:
-                    continue
-
-                media_rel_path: str | None = None
-                media_info = _extract_media_info(msg)
-                if media_info and media_info.get("file_unique_id"):
-                    fid = media_info["file_unique_id"]
-                    subdir = _media_subdir(media_info["type"])
-                    ext = _media_extension(msg)
-
-                    subdir_path = media_dir / subdir
-                    subdir_path.mkdir(parents=True, exist_ok=True)
-
-                    media_rel_path = f"media/{subdir}/{fid}{ext}"
-
-                    if fid not in self._seen_file_ids:
-                        self._seen_file_ids.add(fid)
-                        fpath = str(subdir_path / f"{fid}{ext}")
-
-                        async def _download_media(
-                            _msg: Any,
-                            _path: str,
-                        ) -> tuple[int, int] | None:
-                            async with semaphore:
-                                try:
-                                    result = await client.download_media(
-                                        message=_msg, file_path=_path
-                                    )
-                                    if result:
-                                        size = os.path.getsize(result)
-                                        return 1, size
-                                except Exception:
-                                    logger.warning(
-                                        "Media download failed",
-                                        file_unique_id=fid,
-                                    )
-                                return None
-
-                        dl_result = await _download_media(msg, fpath)
-                        if dl_result:
-                            media_count += dl_result[0]
-                            media_bytes += dl_result[1]
-
-                serialized = _serialize_message(msg, media_rel_path)
-                ts = msg.date or datetime.now(timezone.utc)
-                monthly = _monthly_filename(ts)
-
-                if monthly not in open_files:
-                    fh = open(export_dir / monthly, "a", encoding="utf-8")
-                    open_files[monthly] = fh
-
-                open_files[monthly].write(
-                    json.dumps(serialized, ensure_ascii=False) + "\n"
+                page = await client.get_chat_history(
+                    chat_id, limit=100, offset_id=offset_id
                 )
+                if not page:
+                    break
 
-                processed += 1
-                if processed % 50 == 0:
-                    await self._update_progress(processed, media_count, media_bytes)
-                if processed % 1000 == 0:
-                    logger.info(
-                        "export progress",
-                        chat_id=chat_id,
-                        processed=processed,
-                        media_count=media_count,
-                        media_bytes=media_bytes,
+                for msg in page:
+                    if self._cancelled.is_set():
+                        return
+
+                    if since_msg_id is not None and msg.id < since_msg_id:
+                        continue
+                    if since_date and msg.date and msg.date < since_date:
+                        continue
+
+                    media_rel_path: str | None = None
+                    media_info = _extract_media_info(msg)
+                    if media_info and media_info.get("file_unique_id"):
+                        fid = media_info["file_unique_id"]
+                        subdir = _media_subdir(media_info["type"])
+                        ext = _media_extension(msg)
+
+                        subdir_path = media_dir / subdir
+                        subdir_path.mkdir(parents=True, exist_ok=True)
+
+                        media_rel_path = f"media/{subdir}/{fid}{ext}"
+
+                        if fid not in self._seen_file_ids:
+                            self._seen_file_ids.add(fid)
+                            fpath = str(subdir_path / f"{fid}{ext}")
+
+                            async def _download_media(
+                                _msg: Any,
+                                _path: str,
+                            ) -> tuple[int, int] | None:
+                                async with semaphore:
+                                    try:
+                                        result = await client.download_media(
+                                            message=_msg, file_path=_path
+                                        )
+                                        if result:
+                                            size = os.path.getsize(result)
+                                            return 1, size
+                                    except Exception:
+                                        logger.warning(
+                                            "Media download failed",
+                                            file_unique_id=fid,
+                                        )
+                                    return None
+
+                            dl_result = await _download_media(msg, fpath)
+                            if dl_result:
+                                media_count += dl_result[0]
+                                media_bytes += dl_result[1]
+
+                    serialized = _serialize_message(msg, media_rel_path)
+                    ts = msg.date or datetime.now(timezone.utc)
+                    monthly = _monthly_filename(ts)
+
+                    if monthly not in open_files:
+                        fh = stack.enter_context(
+                            open(export_dir / monthly, "a", encoding="utf-8")
+                        )
+                        open_files[monthly] = fh
+
+                    open_files[monthly].write(
+                        json.dumps(serialized, ensure_ascii=False) + "\n"
                     )
 
-            offset_id = page[-1].id
-            self._export_offset_id = offset_id
+                    processed += 1
+                    if processed % 50 == 0:
+                        await self._update_progress(processed, media_count, media_bytes)
+                    if processed % 1000 == 0:
+                        logger.info(
+                            "export progress",
+                            chat_id=chat_id,
+                            processed=processed,
+                            media_count=media_count,
+                            media_bytes=media_bytes,
+                        )
 
-            if self._progress.state == ExportState.PAUSED:
-                self._save_checkpoint()
+                offset_id = page[-1].id
+                self._export_offset_id = offset_id
 
-        for fh in open_files.values():
-            fh.close()
+                if self._progress.state == ExportState.PAUSED:
+                    self._save_checkpoint()
 
         self._progress.processed = processed
         self._progress.media_count = media_count

@@ -10,6 +10,17 @@
   opening/closing a channel per message. A new `close()` method is added for
   cleanup and is called during `ReceiverService.shutdown()`. This eliminates
   the per-message channel overhead in the hot path.
+- CQ-40: `DiskStorage` file I/O (`store`, `retrieve`, `delete`, `stat`) migrated
+  from synchronous `pathlib` calls to `aiofiles` async open/read/write/unlink/stat,
+  removing blocking I/O from the async hot path. `aiofiles` added as a core
+  dependency.
+- CQ-42: `_health_monitor` loop now doubles the sleep interval (60s → 120s →
+  240s → max 300s) when all components are healthy, and resets to 60s
+  immediately when any component is unhealthy. Reduces idle polling overhead.
+- CQ-43: `_export_messages` file handles are now managed via `contextlib.ExitStack`
+  instead of a manually-tracked `open_files` dict with a final close loop.
+  Files are properly closed on any exit path (normal, exception, or
+  `CancelledError`), preventing file descriptor leaks on cancellation.
 - Code quality sweep across 33 files: type hint refinements, pre-commit hook
   alignment, mypy strict-mode compliance fixes, linting and formatting
   consistency improvements, and test corrections to match updated signatures.

@@ -9,6 +9,7 @@ dependencies = [
     "aio-pika>=9.4.0",
     "aiohttp>=3.10.0",
     "structlog>=25.1.0",
+    "aiofiles>=25.1.0",
     "prometheus-client>=0.21.0",
     "tgcrypto>=1.2.5",
     "pyrotgfork>=2.2.24",

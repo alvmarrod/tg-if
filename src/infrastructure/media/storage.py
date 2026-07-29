@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
+import aiofiles
+import aiofiles.os
+
 from domain.schemas import FileInfo
 
 
@@ -69,13 +72,16 @@ class DiskStorage:
         self, bot_id: str, file_unique_id: str, data: bytes, ext: str
     ) -> str:
         dir_path = self._base / bot_id
-        dir_path.mkdir(parents=True, exist_ok=True)
+        await aiofiles.os.makedirs(dir_path, exist_ok=True)
 
         # Strip any existing extension — use the provided ext
         file_path = dir_path / f"{file_unique_id}.{ext}"
         # Avoid duplicate writes: check if path already exists
-        if not file_path.exists():
-            file_path.write_bytes(data)
+        try:
+            await aiofiles.os.stat(file_path)
+        except FileNotFoundError:
+            async with aiofiles.open(file_path, "wb") as f:
+                await f.write(data)
 
         k = self._key(bot_id, file_unique_id)
         if k not in self._stored_at:
@@ -86,12 +92,15 @@ class DiskStorage:
     async def retrieve(self, bot_id: str, file_unique_id: str) -> bytes:
         # Search for any extension
         dir_path = self._base / bot_id
-        if not dir_path.exists():
+        try:
+            await aiofiles.os.stat(dir_path)
+        except FileNotFoundError:
             raise FileNotFoundError(f"File not found: {bot_id}/{file_unique_id}")
+
         found_path: Path | None = None
-        for f in dir_path.iterdir():
-            if f.is_file() and f.stem == file_unique_id:
-                found_path = f
+        for entry in dir_path.iterdir():
+            if entry.is_file() and entry.stem == file_unique_id:
+                found_path = entry
                 break
 
         if found_path is None:
@@ -99,7 +108,8 @@ class DiskStorage:
 
         k = self._key(bot_id, file_unique_id)
         self._touch_access(k)
-        return found_path.read_bytes()
+        async with aiofiles.open(found_path, "rb") as fh:
+            return await fh.read()
 
     async def path_for(self, bot_id: str, file_unique_id: str) -> Path | None:
         dir_path = self._base / bot_id
@@ -114,7 +124,7 @@ class DiskStorage:
         path = await self.path_for(bot_id, file_unique_id)
         if path is None:
             return False
-        path.unlink()
+        await aiofiles.os.unlink(path)
         k = self._key(bot_id, file_unique_id)
         self._accesses.pop(k, None)
         self._last_access.pop(k, None)
@@ -140,7 +150,7 @@ class DiskStorage:
                     continue
                 k = self._key(bid, fid)
                 try:
-                    stat_info = f.stat()
+                    stat_info = await aiofiles.os.stat(f)
                 except OSError:
                     continue
                 accesses = self._accesses.get(k, 0)

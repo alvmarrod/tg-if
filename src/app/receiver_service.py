@@ -255,8 +255,11 @@ class ReceiverService:
             )
 
     async def _health_monitor(self) -> None:
+        interval = 60.0
+        min_interval = 60.0
+        max_interval = 300.0
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(interval)
 
             try:
                 broker_ok = await self._manager.health()
@@ -287,6 +290,16 @@ class ReceiverService:
                     self._last_client_health[name] = ok
                 except Exception:
                     logger.exception("health check failed for client", bot=name)
+
+            all_healthy = (
+                self._last_health.get("broker", False)
+                and self._last_health.get("admin_notifier", True)
+                and all(self._last_client_health.values())
+            )
+            if all_healthy:
+                interval = min(interval * 2, max_interval)
+            else:
+                interval = min_interval
 
     async def _check_transition(
         self, name: str, current: bool, previous: bool | None
