@@ -11,7 +11,6 @@ from domain.entities import MediaConfigRule, MediaScope
 
 logger = structlog.get_logger()
 
-
 _KNOWN_TYPES = {"gif", "image", "audio", "video", "voice", "sticker", "document"}
 
 
@@ -34,6 +33,7 @@ class MediaConfigManager:
 
     def _load(self) -> None:
         if not self._path.exists():
+            logger.info("media config not found, using defaults", path=str(self._path))
             return
         try:
             raw = json.loads(self._path.read_text())
@@ -41,10 +41,18 @@ class MediaConfigManager:
             logger.info(
                 "media config loaded", path=str(self._path), count=len(self._rules)
             )
+        except json.JSONDecodeError:
+            logger.warning(
+                "media config load failed (invalid JSON)",
+                path=str(self._path),
+                exc_info=True,
+            )
+            raise
         except Exception:
             logger.warning(
                 "media config load failed", path=str(self._path), exc_info=True
             )
+            raise
 
     def _save(self) -> None:
         try:
@@ -52,7 +60,10 @@ class MediaConfigManager:
             data = [r.model_dump() for r in self._rules]
             self._path.write_text(json.dumps(data, indent=2))
         except Exception:
-            logger.exception("media config save failed", path=str(self._path))
+            logger.exception(
+                "media config save failed", path=str(self._path), exc_info=True
+            )
+            raise
 
     def add_rule(self, rule: MediaConfigRule) -> None:
         self._rules.append(rule)
@@ -76,13 +87,12 @@ class MediaConfigManager:
             r
             for r in self._rules
             if not (
-                r.scope == scope
-                and r.scope_id == scope_id
-                and (content_types is None or r.content_types == content_types)
+                (r.scope == scope and r.scope_id == scope_id)
+                or (content_types is not None and r.content_types == content_types)
             )
         ]
         removed = before - len(self._rules)
-        if removed:
+        if removed > 0:
             self._save()
             logger.info("media rule removed", count=removed)
         return removed
@@ -97,9 +107,6 @@ class MediaConfigManager:
         media_type: str | None,
     ) -> bool:
         """Returns True if the media should be eagerly downloaded, False for lazy."""
-        if media_type is None:
-            return False
-
         chat_str = str(chat_id)
         user_str = str(user_id)
 
@@ -122,4 +129,5 @@ class MediaConfigManager:
         winner = user_match or chat_match or global_match
         if winner is None:
             return False
+        # winner is guaranteed to be MediaConfigRule here (not None)
         return winner.action == "eager"

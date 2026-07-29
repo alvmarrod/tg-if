@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 import structlog
 
@@ -14,6 +13,7 @@ from domain.entities import (
     RoutingContext,
     TelegramEvent,
 )
+from domain.schemas import EventEnvelope
 from infrastructure import metrics_exporter as prom
 from domain.rules import RoutingDecision, RoutingRule, RulesEngine, resolve_subtype
 from infrastructure.broker import Publisher
@@ -54,7 +54,17 @@ class EventDispatcher:
                 self._metrics.event_matched(event.bot_id)
             prom.events_matched.labels(bot=event.bot_id).inc()
             envelope = self._build_envelope(event, context, decision.target)
-            await self._publisher.publish(decision.target, envelope)
+            try:
+                await self._publisher.publish(decision.target, envelope)
+            except Exception as exc:
+                logger.error(
+                    "event publish failed",
+                    bot=event.bot_id,
+                    target=decision.target,
+                    error=str(exc),
+                    exc_info=True,
+                )
+                return decision
             if self._metrics:
                 self._metrics.event_published(event.bot_id)
                 self._metrics.target_event(event.bot_id, decision.target)
@@ -96,7 +106,7 @@ class EventDispatcher:
         event: TelegramEvent,
         context: RoutingContext,
         target: str,
-    ) -> dict[str, Any]:
+    ) -> EventEnvelope:
         file_id: str | None = None
         file_unique_id: str | None = None
         if hasattr(event, "file_id"):
@@ -105,13 +115,13 @@ class EventDispatcher:
             file_unique_id = getattr(event, "file_unique_id")
 
         media_url: str | None = None
-        if file_unique_id and hasattr(event, "bot_id"):
+        if file_unique_id:
             base = f"{self._media_base_url}/files/{event.bot_id}/{file_unique_id}"
             if file_id:
                 base += f"?file_id={file_id}"
             media_url = base
 
-        envelope: dict[str, Any] = {
+        envelope: EventEnvelope = {
             "event_id": str(uuid.uuid4()),
             "timestamp": datetime.now(timezone.utc).timestamp(),
             "bot_id": event.bot_id,
@@ -123,11 +133,11 @@ class EventDispatcher:
             "text": getattr(event, "text", None),
             "caption": getattr(event, "caption", None),
             "command_args": getattr(event, "command_args", None),
-            "from_user": event.from_user,
+            "from_user": getattr(event, "from_user", None),
             "reply_to_message_id": getattr(event, "reply_to_message_id", None),
             "reply_to_message": getattr(event, "reply_to_message", None),
             "routing_context": context.model_dump(),
-            "payload": event.raw_payload,
+            "payload": getattr(event, "raw_payload", None),
         }
 
         if file_id:

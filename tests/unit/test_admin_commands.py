@@ -29,6 +29,7 @@ class MockClient:
         self.send_text = AsyncMock()
         self.health = AsyncMock(return_value=True)
         self.answer_callback_query = AsyncMock()
+        self.set_bot_commands = AsyncMock()
 
 
 class MockManager:
@@ -72,6 +73,9 @@ class MockExporter:
         self.cancel = MagicMock()
 
 
+_UNSET = object()
+
+
 def _make_handler(
     *,
     admin_client: Any = None,
@@ -84,7 +88,7 @@ def _make_handler(
     dispatcher: Any = None,
     upload_registry: Any = None,
     upload_storage: Any = None,
-    chat_exporter: Any = None,
+    chat_exporter: Any = _UNSET,
     on_shutdown: Any = None,
     on_start: Any = None,
     on_restart: Any = None,
@@ -95,7 +99,7 @@ def _make_handler(
     met: Any = _make_metrics() if metrics is None else metrics
     cls: Any = {} if clients is None else clients
     disp: Any = MockDispatcher() if dispatcher is None else dispatcher
-    exp: Any = MockExporter() if chat_exporter is None else chat_exporter
+    exp = MockExporter() if chat_exporter is _UNSET else chat_exporter
     return AdminCommandHandler(
         admin_client=ac,
         user_id=user_id,
@@ -171,6 +175,17 @@ def _make_event(command: str, args: list[str] | None = None) -> CommandEvent:
         command=command,
         command_args=args or [],
         text=f"/{command}",
+    )
+
+
+def _make_callback(callback_data: str) -> CallbackQueryEvent:
+    return CallbackQueryEvent(
+        event_id="cb",
+        bot_id="__admin__",
+        chat_id=999,
+        user_id=999,
+        callback_id="cb_1",
+        callback_data=callback_data,
     )
 
 
@@ -533,7 +548,7 @@ class TestParseKwargs:
         assert _parse_kwargs(["--bot", "aibot"]) == {"bot": "aibot"}
 
     def test_key_without_value(self) -> None:
-        assert _parse_kwargs(["--flag"]) == {"flag": ""}
+        assert _parse_kwargs(["--flag"]) == {"flag": None}
 
     def test_multiple_keys(self) -> None:
         assert _parse_kwargs(["--bot", "aibot", "--target", "test"]) == {
@@ -646,9 +661,9 @@ class TestUploadAdminCommands:
     @property
     def mock_registry(self) -> MagicMock:
         m = MagicMock()
-        m.list_all = MagicMock(return_value=[])
-        m.delete = MagicMock(return_value=True)
-        m.purge_all = MagicMock(return_value=0)
+        m.list_all = AsyncMock(return_value=[])
+        m.delete = AsyncMock(return_value=True)
+        m.purge_all = AsyncMock(return_value=0)
         return m
 
     @property
@@ -1154,3 +1169,102 @@ class TestExportAdminCommands:
         exporter.pause.assert_not_called()
         exporter.resume.assert_not_called()
         exporter.cancel.assert_not_called()
+
+
+class TestRegisterCommands:
+    async def test_register_commands(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.register_commands()
+        admin.set_bot_commands.assert_awaited_once()
+        cmds = admin.set_bot_commands.await_args.args[0]
+        cmd_names = [c[0] for c in cmds]
+        assert "help" in cmd_names
+        assert "status" in cmd_names
+        assert "ping" in cmd_names
+
+
+class TestMediaCommands:
+    async def test_media_eager_no_config(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("media-eager"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Media config" in args[0][1]
+
+    async def test_media_lazy_no_config(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("media-lazy"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Media config" in args[0][1]
+
+    async def test_media_list_no_storage(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("media-list"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Storage not available" in args[0][1]
+
+
+class TestChatsCommand:
+    async def test_chats_no_clients(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        await handler.handle(_make_event("chats"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "No bot clients" in args[0][1]
+
+
+class TestExportCommands:
+    async def test_export_cancel_no_exporter(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin, chat_exporter=None)
+        await handler.handle(_make_event("export-cancel"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "Export service" in args[0][1]
+
+    async def test_export_cancel_idle(self) -> None:
+        admin = MockClient()
+        exporter = MockExporter()
+        handler = _make_handler(admin_client=admin, chat_exporter=exporter)
+        await handler.handle(_make_event("export-cancel"), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "No export" in args[0][1]
+
+    async def test_export_no_exporter(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin, chat_exporter=None)
+        await handler.handle(_make_event("export", ["12345"]), _private_context())
+        admin.send_text.assert_awaited_once()
+        args = admin.send_text.await_args
+        assert args is not None
+        assert "not available" in args[0][1]
+
+
+class TestHandleCallbackRouting:
+    async def test_callback_chats_triggers_handler(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        event = _make_callback("chats:next:5")
+        await handler.handle(event, _private_context())
+        assert admin.answer_callback_query.await_count >= 1
+
+    async def test_callback_export_triggers_handler(self) -> None:
+        admin = MockClient()
+        handler = _make_handler(admin_client=admin)
+        event = _make_callback("export:pause")
+        await handler.handle(event, _private_context())
+        assert admin.answer_callback_query.await_count >= 1

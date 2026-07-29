@@ -1,6 +1,7 @@
+import io
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pyrogram
 import pyrogram.connection.connection  # noqa: F811
@@ -14,6 +15,7 @@ from pyrogram.handlers.disconnect_handler import DisconnectHandler
 from pyrogram.types import BotCommand, InputMediaPhoto, InputMediaVideo, Message
 
 from domain.entities import ChatType, RoutingContext, TelegramEvent
+from domain.schemas import ChatDialog
 from infrastructure.config import BotConfig
 from infrastructure.telegram.handlers import (
     build_reply_markup,
@@ -32,7 +34,8 @@ from infrastructure.telegram.handlers import (
 pyrogram.session.session.Session.PING_INTERVAL = 15  # 5s → 15s
 pyrogram.session.session.Session.WAIT_TIMEOUT = 30  # 15s → 30s
 pyrogram.connection.connection.Connection.MAX_RETRIES = 5  # 3 → 5
-_tcp_cls = pyrogram.connection.transport.tcp.TCP  # type: ignore[attr-defined]
+_tcp: Any = pyrogram.connection.transport.tcp
+_tcp_cls = _tcp.TCP
 _tcp_cls.TIMEOUT = 30  # 10s → 30s (must be >= PING_INTERVAL)
 
 
@@ -44,7 +47,7 @@ EventCallback = Callable[[TelegramEvent, RoutingContext], Awaitable[None]]
 def _parse_mode(value: str | None) -> ParseMode | None:
     if value is None:
         return None
-    return ParseMode(value.upper())
+    return ParseMode(value)
 
 
 class TelegramClient:
@@ -71,7 +74,7 @@ class TelegramClient:
         if config.bot_token is not None:
             self._client_kwargs["bot_token"] = config.bot_token
         self._init_client()
-        self._known_chats: dict[int, dict[str, Any]] = {}
+        self._known_chats: dict[int, ChatDialog] = {}
 
     def _init_client(self) -> None:
         self._client = PyrogramClient(**self._client_kwargs)
@@ -93,7 +96,7 @@ class TelegramClient:
         return self._bot_token is None
 
     @property
-    def known_chats(self) -> list[dict[str, Any]]:
+    def known_chats(self) -> list[ChatDialog]:
         """Return lightweight dicts of chats seen by this client."""
         return list(self._known_chats.values())
 
@@ -104,16 +107,17 @@ class TelegramClient:
             first = getattr(chat, "first_name", "") or ""
             last = getattr(chat, "last_name", "") or ""
             title = f"{first} {last}".strip()
-        self._known_chats[chat.id] = {
-            "chat_id": chat.id,
-            "title": title,
-            "type": str(chat.type).split(".")[-1].lower() if chat.type else "unknown",
-            "members": getattr(chat, "member_count", 0) or 0,
-            "can_read": True,
-            "can_write": getattr(
-                getattr(chat, "permissions", None), "can_send_messages", False
-            ),
-        }
+        permissions = getattr(chat, "permissions", None)
+        self._known_chats[chat.id] = ChatDialog(
+            chat_id=chat.id,
+            title=title,
+            type=str(chat.type).split(".")[-1].lower() if chat.type else "unknown",
+            members=getattr(chat, "member_count", 0) or 0,
+            can_read=True,
+            can_write=getattr(permissions, "can_send_messages", False)
+            if permissions
+            else False,
+        )
 
     async def start(self) -> None:
         try:
@@ -142,10 +146,12 @@ class TelegramClient:
                     bot=self._bot_id,
                     exc_info=True,
                 )
+                raise
         except Exception:
             logger.warning(
                 "telegram client failed to start", bot=self._bot_id, exc_info=True
             )
+            raise
 
     async def stop(self) -> None:
         try:
@@ -155,6 +161,7 @@ class TelegramClient:
             logger.warning(
                 "telegram client stop error", bot=self._bot_id, exc_info=True
             )
+            raise
 
     def set_event_callback(self, callback: EventCallback) -> None:
         self._event_callback = callback
@@ -170,9 +177,12 @@ class TelegramClient:
             logger.warning(
                 "bot commands registration failed", bot=self._bot_id, exc_info=True
             )
+            raise
 
     async def health(self) -> bool:
-        return self._client.is_connected if self._client else False
+        if self._client is None:
+            return False
+        return self._client.is_connected
 
     async def send_text(
         self,
@@ -191,7 +201,8 @@ class TelegramClient:
         if markup is not None:
             kwargs["reply_markup"] = markup
         result = await self._client.send_message(chat_id=chat_id, text=text, **kwargs)
-        assert result is not None
+        if result is None:
+            raise RuntimeError("send_message returned None")
         return result
 
     async def send_photo(
@@ -214,7 +225,8 @@ class TelegramClient:
         if markup is not None:
             kwargs["reply_markup"] = markup
         result = await self._client.send_photo(chat_id=chat_id, **kwargs)
-        assert result is not None
+        if result is None:
+            raise RuntimeError("send_photo returned None")
         return result
 
     async def send_document(
@@ -237,7 +249,8 @@ class TelegramClient:
         if markup is not None:
             kwargs["reply_markup"] = markup
         result = await self._client.send_document(chat_id=chat_id, **kwargs)
-        assert result is not None
+        if result is None:
+            raise RuntimeError("send_document returned None")
         return result
 
     async def send_video(
@@ -260,7 +273,8 @@ class TelegramClient:
         if markup is not None:
             kwargs["reply_markup"] = markup
         result = await self._client.send_video(chat_id=chat_id, **kwargs)
-        assert result is not None
+        if result is None:
+            raise RuntimeError("send_video returned None")
         return result
 
     async def send_audio(
@@ -283,7 +297,8 @@ class TelegramClient:
         if markup is not None:
             kwargs["reply_markup"] = markup
         result = await self._client.send_audio(chat_id=chat_id, **kwargs)
-        assert result is not None
+        if result is None:
+            raise RuntimeError("send_audio returned None")
         return result
 
     async def edit_message_text(
@@ -303,7 +318,8 @@ class TelegramClient:
         result = await self._client.edit_message_text(
             chat_id=chat_id, message_id=message_id, text=text, **kwargs
         )
-        assert result is not None
+        if result is None:
+            raise RuntimeError("edit_message_text returned None")
         return result
 
     async def edit_message_reply_markup(
@@ -313,12 +329,12 @@ class TelegramClient:
         reply_markup: list[list[dict[str, Any]]] | None = None,
     ) -> Message:
         markup = build_reply_markup(reply_markup)
-        result = await self._client.edit_message_reply_markup(
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=markup,  # type: ignore[arg-type]
-        )
-        assert result is not None
+        kwargs: dict[str, Any] = dict(chat_id=chat_id, message_id=message_id)
+        if markup is not None:
+            kwargs["reply_markup"] = markup
+        result = await self._client.edit_message_reply_markup(**kwargs)
+        if result is None:
+            raise RuntimeError("edit_message_reply_markup returned None")
         return result
 
     async def answer_callback_query(
@@ -340,7 +356,12 @@ class TelegramClient:
             cache_time=cache_time,
             **kwargs,
         )
-        return cast(bool, result)
+        # Pyrogram returns None on success
+        if result is not None:
+            raise RuntimeError(
+                f"answer_callback_query returned unexpected value: {result}"
+            )
+        return True
 
     async def send_media_group(
         self,
@@ -350,14 +371,22 @@ class TelegramClient:
         **kwargs: Any,
     ) -> list[Message]:
         converted: list[InputMediaPhoto | InputMediaVideo] = []
-        for item in media:
+        for idx, item in enumerate(media):
             t = item.get("type")
             m = item.get("media", "")
             cap = item.get("caption", "")
+            if t is None:
+                raise ValueError(f"media[{idx}] missing 'type' field")
             if t == "photo":
+                if not m:
+                    raise ValueError(f"media[{idx}] 'media' field is empty")
                 converted.append(InputMediaPhoto(media=m, caption=cap))
             elif t == "video":
+                if not m:
+                    raise ValueError(f"media[{idx}] 'media' field is empty")
                 converted.append(InputMediaVideo(media=m, caption=cap))
+            else:
+                raise ValueError(f"media[{idx}] has unsupported type: {t}")
         if not converted:
             return []
         kwargs["media"] = converted
@@ -369,10 +398,12 @@ class TelegramClient:
         self,
         chat_id: int,
         message_ids: int | list[int],
-    ) -> int:
-        return await self._client.delete_messages(
+    ) -> None:
+        result = await self._client.delete_messages(
             chat_id=chat_id, message_ids=message_ids
         )
+        if result is not None:
+            raise RuntimeError("delete_messages returned unexpected value")
 
     async def _on_connect_handler(self) -> None:
         logger.info("telegram client connected", bot=self._bot_id)
@@ -391,6 +422,9 @@ class TelegramClient:
         event = message_to_event(self._bot_id, message)
         event.update_type = "message"
         context = extract_routing_context(message)
+        if context is None:
+            logger.warning("failed to extract routing context", bot=self._bot_id)
+            return
         await self._event_callback(event, context)
 
     async def _on_callback_query(self, client: PyrogramClient, query: Any) -> None:
@@ -402,6 +436,11 @@ class TelegramClient:
         event = callback_to_event(self._bot_id, query)
         event.update_type = "callback_query"
         context = context_from_callback(query)
+        if context is None:
+            logger.warning(
+                "failed to extract routing context from callback", bot=self._bot_id
+            )
+            return
         await self._event_callback(event, context)
 
     async def _on_edited_message(
@@ -413,6 +452,12 @@ class TelegramClient:
         event = edited_message_to_event(self._bot_id, message)
         event.update_type = "edited_message"
         context = extract_routing_context(message)
+        if context is None:
+            logger.warning(
+                "failed to extract routing context from edited message",
+                bot=self._bot_id,
+            )
+            return
         await self._event_callback(event, context)
 
     async def _on_message_reaction_updated(
@@ -425,6 +470,11 @@ class TelegramClient:
             self._register_chat(chat)
         event = reaction_updated_to_event(self._bot_id, reaction)
         context = context_from_reaction_updated(reaction)
+        if context is None:
+            logger.warning(
+                "failed to extract routing context from reaction", bot=self._bot_id
+            )
+            return
         await self._event_callback(event, context)
 
     async def _on_message_reaction_count_updated(
@@ -439,7 +489,7 @@ class TelegramClient:
         context = RoutingContext(chat_type=ChatType.PRIVATE)
         await self._event_callback(event, context)
 
-    async def get_dialogs(self) -> list[dict[str, Any]]:
+    async def get_dialogs(self) -> list[ChatDialog]:
         """Return known chats.
 
         This method only works for user (non-bot) accounts in Pyrogram.
@@ -449,18 +499,19 @@ class TelegramClient:
         """
         return self.known_chats
 
-    async def discover_chats(self) -> list[dict[str, Any]]:
+    async def discover_chats(self) -> list[ChatDialog]:
         """Call Pyrogram's real get_dialogs() to discover all accessible chats.
 
         Only works for user (non-bot) accounts via MTProto.
         Bots will get BOT_METHOD_INVALID — callers must guard with is_user.
         """
-        dialogs: list[dict[str, Any]] = []
+        dialogs: list[ChatDialog] = []
         gen = self._client.get_dialogs()
-        if gen is None:
-            return dialogs
+        assert gen is not None
         async for dialog in gen:
             chat = dialog.chat
+            if chat is None:
+                continue
             permissions = getattr(chat, "permissions", None)
             title = chat.title or ""
             if not title:
@@ -468,18 +519,18 @@ class TelegramClient:
                 last = getattr(chat, "last_name", "") or ""
                 title = f"{first} {last}".strip()
             dialogs.append(
-                {
-                    "chat_id": chat.id,
-                    "title": title,
-                    "type": str(chat.type).split(".")[-1].lower()
+                ChatDialog(
+                    chat_id=chat.id,
+                    title=title,
+                    type=str(chat.type).split(".")[-1].lower()
                     if chat.type
                     else "unknown",
-                    "members": getattr(chat, "member_count", 0) or 0,
-                    "can_read": True,
-                    "can_write": permissions.can_send_messages
+                    members=getattr(chat, "member_count", 0) or 0,
+                    can_read=True,
+                    can_write=getattr(permissions, "can_send_messages", False)
                     if permissions
                     else False,
-                }
+                )
             )
         return dialogs
 
@@ -505,26 +556,36 @@ class TelegramClient:
         if offset_date is not None:
             kwargs["offset_date"] = offset_date
         gen = self._client.get_chat_history(**kwargs)
-        if gen is not None:
-            async for msg in gen:
-                messages.append(msg)
+        assert gen is not None
+        async for msg in gen:
+            messages.append(msg)
         return messages
 
     async def download_media(
         self,
         message: Any,
         file_path: str,
-    ) -> str | None:
+    ) -> str:
         """Download media from a message to disk.
 
-        Returns the local file path, or None on failure.
+        Returns the local file path.
+        Raises an exception on failure.
         """
         result = await self._client.download_media(
             message=message,
             file_name=file_path,
         )
         if result is None:
-            return None
-        if isinstance(result, str):
-            return result
-        return None
+            raise RuntimeError("download_media returned None")
+        return str(result)
+
+    async def download_media_in_memory(self, file_id: str) -> io.BytesIO:
+        """Download media by file_id and return it as BytesIO.
+
+        Raises RuntimeError if the download returns no data.
+        """
+        result = await self._client.download_media(file_id, in_memory=True)
+        if result is None:
+            raise RuntimeError("download_media_in_memory returned None")
+        assert isinstance(result, io.BytesIO)
+        return result

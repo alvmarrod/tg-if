@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
+import aiofiles
+import aiofiles.os
+
 from domain.schemas import FileInfo
 
 
@@ -69,13 +72,16 @@ class DiskStorage:
         self, bot_id: str, file_unique_id: str, data: bytes, ext: str
     ) -> str:
         dir_path = self._base / bot_id
-        dir_path.mkdir(parents=True, exist_ok=True)
+        await aiofiles.os.makedirs(dir_path, exist_ok=True)
 
         # Strip any existing extension — use the provided ext
         file_path = dir_path / f"{file_unique_id}.{ext}"
         # Avoid duplicate writes: check if path already exists
-        if not file_path.exists():
-            file_path.write_bytes(data)
+        try:
+            await aiofiles.os.stat(file_path)
+        except FileNotFoundError:
+            async with aiofiles.open(file_path, "wb") as f:
+                await f.write(data)
 
         k = self._key(bot_id, file_unique_id)
         if k not in self._stored_at:
@@ -83,17 +89,27 @@ class DiskStorage:
         self._touch_access(k)
         return str(file_path)
 
-    async def retrieve(self, bot_id: str, file_unique_id: str) -> bytes | None:
+    async def retrieve(self, bot_id: str, file_unique_id: str) -> bytes:
         # Search for any extension
         dir_path = self._base / bot_id
-        if not dir_path.exists():
-            return None
-        for f in dir_path.iterdir():
-            if f.stem == file_unique_id and f.is_file():
-                k = self._key(bot_id, file_unique_id)
-                self._touch_access(k)
-                return f.read_bytes()
-        return None
+        try:
+            await aiofiles.os.stat(dir_path)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found: {bot_id}/{file_unique_id}")
+
+        found_path: Path | None = None
+        for entry in dir_path.iterdir():
+            if entry.is_file() and entry.stem == file_unique_id:
+                found_path = entry
+                break
+
+        if found_path is None:
+            raise FileNotFoundError(f"File not found: {bot_id}/{file_unique_id}")
+
+        k = self._key(bot_id, file_unique_id)
+        self._touch_access(k)
+        async with aiofiles.open(found_path, "rb") as fh:
+            return await fh.read()
 
     async def path_for(self, bot_id: str, file_unique_id: str) -> Path | None:
         dir_path = self._base / bot_id
@@ -108,7 +124,7 @@ class DiskStorage:
         path = await self.path_for(bot_id, file_unique_id)
         if path is None:
             return False
-        path.unlink()
+        await aiofiles.os.unlink(path)
         k = self._key(bot_id, file_unique_id)
         self._accesses.pop(k, None)
         self._last_access.pop(k, None)
@@ -129,23 +145,31 @@ class DiskStorage:
                     continue
                 fid = f.stem
                 ext = f.suffix.lstrip(".")
+                # Skip files with no extension
+                if not ext:
+                    continue
                 k = self._key(bid, fid)
+                try:
+                    stat_info = await aiofiles.os.stat(f)
+                except OSError:
+                    continue
+                accesses = self._accesses.get(k, 0)
                 results.append(
                     FileInfo(
                         bot_id=bid,
                         file_unique_id=fid,
                         ext=ext,
-                        size=f.stat().st_size,
-                        accesses=self._accesses.get(k, 0),
+                        size=stat_info.st_size,
+                        accesses=accesses,
                         last_access=(
                             datetime.fromtimestamp(
-                                self._last_access[k], tz=timezone.utc
+                                self._last_access.get(k, 0), tz=timezone.utc
                             )
                             if k in self._last_access
                             else None
                         ),
                         stored_at=datetime.fromtimestamp(
-                            self._stored_at.get(k, f.stat().st_mtime), tz=timezone.utc
+                            self._stored_at.get(k, stat_info.st_mtime), tz=timezone.utc
                         ),
                     )
                 )
@@ -201,10 +225,11 @@ class DiskStorage:
                 total = sum(f.size for f in files)
                 to_prune: list[FileInfo] = []
                 for f in reversed(sorted_files):
-                    if total <= max_size:
+                    if total > max_size:
+                        to_prune.append(f)
+                        total -= f.size
+                    else:
                         break
-                    to_prune.append(f)
-                    total -= f.size
                 sorted_files = to_prune
             elif keep_first is not None:
                 sorted_files = sorted_files[keep_first:]

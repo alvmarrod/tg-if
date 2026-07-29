@@ -1,7 +1,7 @@
 # Media Retrieval
 
-**Date:** 2026-06-15  
-**Status:** Approved  
+**Date:** 2026-06-15
+**Status:** Approved
 **Roadmap:** `.agent/media-retrieval-roadmap.md`
 
 ## Problem

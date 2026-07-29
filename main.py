@@ -1,9 +1,5 @@
 import asyncio
 import signal
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 import structlog
 
@@ -13,8 +9,8 @@ from infrastructure.config import ConfigLoader
 
 
 async def main() -> None:
-    config = ConfigLoader.load()
-    log_buffer = LogBuffer()
+    """Main entry point for the application."""
+    log_buffer: LogBuffer = LogBuffer()
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt="iso"),
@@ -23,18 +19,34 @@ async def main() -> None:
         ],
         cache_logger_on_first_use=True,
     )
+
     logger = structlog.get_logger()
 
-    service = ReceiverService(config, log_buffer=log_buffer)
-    await service.start()
-    logger.info("starting", version="0.1.0", bots=[b.name for b in config.bots])
+    config = ConfigLoader.load()
+    service: ReceiverService = ReceiverService(config, log_buffer=log_buffer)
+    try:
+        await service.start()
 
-    stop_event = asyncio.Event()
-    loop = asyncio.get_running_loop()
+        logger.info(
+            "starting",
+            version="0.1.0",
+            bots=[b.name for b in config.bots],
+        )
+    except Exception:
+        logger.error("failed to start service", exc_info=True)
+        raise
+
+    stop_event: asyncio.Event = asyncio.Event()
+    loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop_event.set)
 
     await stop_event.wait()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.remove_signal_handler(sig)
+
     await service.stop()
 
 

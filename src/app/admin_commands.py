@@ -36,8 +36,8 @@ from infrastructure.telegram.client import TelegramClient
 logger = structlog.get_logger()
 
 
-def _parse_kwargs(args: list[str]) -> dict[str, str]:
-    kwargs: dict[str, str] = {}
+def _parse_kwargs(args: list[str]) -> dict[str, str | None]:
+    kwargs: dict[str, str | None] = {}
     i = 0
     while i < len(args):
         if args[i].startswith("--"):
@@ -46,7 +46,7 @@ def _parse_kwargs(args: list[str]) -> dict[str, str]:
                 kwargs[key] = args[i + 1]
                 i += 2
             else:
-                kwargs[key] = ""
+                kwargs[key] = None
                 i += 1
         else:
             i += 1
@@ -397,7 +397,7 @@ class AdminCommandHandler:
                     f"  {stats['total_files']} files ({_format_size(stats['total_size_bytes'])})"
                 )
             except Exception:
-                pass
+                logger.warning("Failed to get media cache stats", exc_info=True)
 
         total_rules = sum(len(rules) for rules in self._dispatcher.get_rules().values())
         lines.append("")
@@ -580,11 +580,13 @@ class AdminCommandHandler:
 
         lines = [f"\U0001f4cb Recent logs (last {len(entries)}):"]
         for e in reversed(entries):
-            ts = str(e.get("timestamp", ""))[11:19]
-            level = e.get("level", "INFO")
-            event = e.get("event", "")
-            extra = e.get("extra", {})
-            extra_str = "  ".join(f"{k}={v}" for k, v in extra.items() if v is not None)
+            ts = str(e.get("timestamp"))[11:19]
+            level = e.get("level")
+            event = e.get("event")
+            extra = e.get("extra")
+            extra_str = "  ".join(
+                f"{k}={v}" for k, v in (extra or {}).items() if v is not None
+            )
             lines.append(f"{ts} {level:<5} {event}  {extra_str}")
 
         await self._admin.send_text(chat_id, "\n".join(lines))
@@ -607,7 +609,7 @@ class AdminCommandHandler:
             await self._admin.send_text(chat_id, f"Invalid scope: {scope_str}")
             return
 
-        types_str = kwargs.get("type", "all")
+        types_str = kwargs.get("type") or "all"
         content_types = [t.strip() for t in types_str.split(",")]
 
         rule = MediaConfigRule(
@@ -640,7 +642,7 @@ class AdminCommandHandler:
             await self._admin.send_text(chat_id, f"Invalid scope: {scope_str}")
             return
 
-        types_str = kwargs.get("type", "all")
+        types_str = kwargs.get("type") or "all"
         content_types = [t.strip() for t in types_str.split(",")]
 
         rule = MediaConfigRule(
@@ -677,7 +679,7 @@ class AdminCommandHandler:
             await self._admin.send_text(chat_id, "Storage not available")
             return
         kwargs = _parse_kwargs(args)
-        sort_spec = kwargs.get("sort", "size:desc")
+        sort_spec = kwargs.get("sort") or "size:desc"
         files = await self._storage.list_files()
 
         if not files:
@@ -708,7 +710,7 @@ class AdminCommandHandler:
         ]
         for f in files:
             la = f.last_access.strftime("%Y-%m-%d %H:%M") if f.last_access else "—"
-            sa = f.stored_at.strftime("%Y-%m-%d %H:%M")
+            sa = f.stored_at.strftime("%Y-%m-%d %H:%M") if f.stored_at else "—"
             size_str = _format_size(f.size)
             lines.append(
                 f"{f.file_unique_id:<18} {f.ext:<6} {size_str:>10} "
@@ -816,10 +818,10 @@ class AdminCommandHandler:
             await self._admin.send_text(chat_id, "Upload registry not available")
             return
         kwargs = _parse_kwargs(args)
-        sort_spec = kwargs.get("sort", "uses:desc")
+        sort_spec = kwargs.get("sort") or "uses:desc"
         bot_filter = kwargs.get("bot")
 
-        entries = self._upload_registry.list_all(bot_id=bot_filter)
+        entries = await self._upload_registry.list_all(bot_id=bot_filter)
         if not entries:
             await self._admin.send_text(chat_id, "No upload records")
             return
@@ -858,8 +860,12 @@ class AdminCommandHandler:
                 if e.last_used_at
                 else "—"
             )
-            ca = datetime.fromtimestamp(e.created_at, tz=timezone.utc).strftime(
-                "%Y-%m-%d %H:%M"
+            ca = (
+                datetime.fromtimestamp(e.created_at, tz=timezone.utc).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                if e.created_at
+                else "—"
             )
             size_str = _format_size(e.size)
             lines.append(
@@ -916,7 +922,7 @@ class AdminCommandHandler:
             )
             return
 
-        entries = self._upload_registry.list_all(bot_id=bot_filter)
+        entries = await self._upload_registry.list_all(bot_id=bot_filter)
         if not entries:
             await self._admin.send_text(chat_id, "No upload records to prune")
             return
@@ -955,7 +961,7 @@ class AdminCommandHandler:
                     content_hash=e.content_hash,
                     exc_info=True,
                 )
-            self._upload_registry.delete(e.content_hash)
+            await self._upload_registry.delete(e.content_hash)
             deleted += 1
 
         await self._admin.send_text(
@@ -970,7 +976,7 @@ class AdminCommandHandler:
         kwargs = _parse_kwargs(args)
         bot_filter = kwargs.get("bot")
 
-        entries = self._upload_registry.list_all(bot_id=bot_filter)
+        entries = await self._upload_registry.list_all(bot_id=bot_filter)
         if not entries:
             await self._admin.send_text(chat_id, "No upload records to purge")
             return
@@ -997,7 +1003,7 @@ class AdminCommandHandler:
                     content_hash=e.content_hash,
                     exc_info=True,
                 )
-            self._upload_registry.delete(e.content_hash)
+            await self._upload_registry.delete(e.content_hash)
             deleted += 1
 
         await self._admin.send_text(
@@ -1048,7 +1054,7 @@ class AdminCommandHandler:
 
     async def _cmd_chats(self, chat_id: int, args: list[str]) -> None:
         kwargs = _parse_kwargs(args)
-        search = kwargs.get("search", "").strip().lower()
+        search = (kwargs.get("search") or "").strip().lower()
 
         if search:
             self._chats_search[chat_id] = search
@@ -1204,7 +1210,7 @@ class AdminCommandHandler:
             if since_str.lstrip("-").isdigit():
                 since = int(since_str)
             else:
-                since = since_str
+                since = str(since_str)
 
         parallelism = 1
         par_str = kwargs.get("parallelism")
@@ -1227,9 +1233,6 @@ class AdminCommandHandler:
                     chat_id, f"Invalid offset value: {offset_str}"
                 )
                 return
-
-        if self._chat_exporter.state == ExportState.CANCELLED:
-            self._chat_exporter._progress.state = ExportState.IDLE
 
         if self._chat_exporter.state not in (ExportState.IDLE,):
             await self._admin.send_text(

@@ -1,7 +1,7 @@
 # HLD Alignment Audit Report
 
-**Date:** 2026-06-14  
-**Audited by:** Decision Engine  
+**Date:** 2026-06-14
+**Audited by:** Decision Engine
 **Scope:** doc/architecture_overview.md | doc/subsystems/* | src/ codebase | .agent/backlog.md
 
 ---

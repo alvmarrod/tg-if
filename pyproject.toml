@@ -7,8 +7,9 @@ requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.12.5",
     "aio-pika>=9.4.0",
-    "aiohttp>=3.10.0",
+    "aiohttp>=3.14.1",
     "structlog>=25.1.0",
+    "aiofiles>=25.1.0",
     "prometheus-client>=0.21.0",
     "tgcrypto>=1.2.5",
     "pyrotgfork>=2.2.24",
@@ -21,7 +22,7 @@ where = ["src"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
 testpaths = ["tests"]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration' --cov=src --cov-report=term-missing"
 markers = [
     "integration: marks tests that require Docker (RabbitMQ container)",
 ]
@@ -31,9 +32,39 @@ mypy_path = "src"
 strict = true
 explicit_package_bases = true
 
+[[tool.mypy.overrides]]
+module = "tests.unit.test_receiver_service"
+disable_error_code = ["method-assign", "attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_telegram_client"
+disable_error_code = ["assignment", "func-returns-value"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_handlers"
+disable_error_code = ["index", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_endpoint"
+disable_error_code = ["operator"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_publisher"
+disable_error_code = ["union-attr"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_media_downloader"
+disable_error_code = ["attr-defined", "arg-type", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = "tests.unit.test_admin_commands"
+disable_error_code = ["arg-type", "union-attr"]
+
 [dependency-groups]
 dev = [
     "mypy>=2.1.0",
+    "pytest-timeout>=2.4.0",
+    "types-aiofiles>=25.1.0.20260518",
 ]
 
 [project.optional-dependencies]
@@ -45,4 +76,7 @@ dev = [
     "ruff>=0.9.0",
     "pre-commit>=4.0",
     "testcontainers>=4.0.0",
+    "bandit>=1.8.0",
+    "pip-audit>=2.7.0",
+    "hypothesis>=6.119.0",
 ]

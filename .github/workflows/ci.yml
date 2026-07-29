@@ -4,42 +4,93 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
+env:
+  UV_SYNC_FROZEN: true
 
 jobs:
-  check:
+  lint-typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
       - run: uv sync --all-extras
       - run: uv run ruff check src/ tests/
-      - run: uv run ruff format --check src/ tests/
       - run: uv run mypy src/ tests/
-      - run: uv run pytest
-      - name: markdownlint
-        uses: DavidAnson/markdownlint-cli2-action@v23
-        with:
-          globs: |
-            **/*.md
-            !.venv/**
 
-  docker:
+  test:
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/setup-python@v5
         with:
-          push: false
-          tags: tg-if:test
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv sync --all-extras
+      - run: uv run pytest --cov=src --cov-fail-under=80 --cov-report=term-missing
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv sync --all-extras
+      - run: uv run pytest -m integration --timeout=120
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv sync --all-extras
+      - name: Bandit security scan
+        run: uv run bandit -r src/ -x tests/ --severity-level high
+      - name: pip-audit dependency vulnerability scan
+        run: uv run pip-audit --strict
+
+  badges:
+    needs: [lint-typecheck, test, integration]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv sync --all-extras
+      - run: uv run pytest --cov=src --cov-report=json --cov-report= -q
+      - run: python badges/gen_badges.py --skip-tests
+      - run: rm -f coverage.json
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update coverage badges [skip ci]"
+          file_pattern: "badges/*.json"

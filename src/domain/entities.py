@@ -1,9 +1,13 @@
 """Domain entities for tg-if service."""
 
+from __future__ import annotations
+
 from enum import Enum
-from typing import Optional, Any, Literal
+from typing import Any, Literal
 from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, Field
+
+from domain.schemas import FromUser, ReplyToMessage
 
 
 class EventType(str, Enum):
@@ -35,13 +39,13 @@ class RoutingContext(BaseModel):
 
     chat_type: ChatType
     has_media: bool = False
-    media_type: Optional[str] = None  # photo, video, document, audio, etc.
-    user_role: Optional[str] = None  # creator, administrator, member
-    command: Optional[str] = None  # e.g., "/start", "/help"
+    media_type: str | None = None  # photo, video, document, audio, etc.
+    user_role: str | None = None  # creator, administrator, member
+    command: str | None = None  # e.g., "/start", "/help"
     is_reply: bool = False
     is_forward: bool = False
-    reaction_emoji: Optional[str] = None  # emoji for reaction events
-    old_reaction_emoji: Optional[str] = None  # previous emoji for reaction changes
+    reaction_emoji: str | None = None  # emoji for reaction events
+    old_reaction_emoji: str | None = None  # previous emoji for reaction changes
 
     model_config = ConfigDict(use_enum_values=True)
 
@@ -55,13 +59,11 @@ class TelegramEvent(BaseModel):
     event_type: EventType
     chat_id: int
     user_id: int
-    from_user: dict[str, Any] | None = Field(
+    from_user: FromUser | None = Field(
         default=None,
         description="Sender info: id, first_name, last_name, username, is_bot, language_code",
     )
-    raw_payload: dict[str, Any] = Field(
-        default_factory=dict, description="Raw Telegram update"
-    )
+    raw_payload: Any = Field(default_factory=dict, description="Raw Telegram update")
     update_type: str | None = Field(
         default=None,
         description="Pyrogram handler source: message, edited_message, callback_query, message_reaction_updated, etc.",
@@ -75,18 +77,18 @@ class MessageEvent(TelegramEvent):
 
     event_type: EventType = EventType.MESSAGE
     message_id: int
-    text: Optional[str] = None
-    caption: Optional[str] = None
-    media_type: Optional[str] = None
+    text: str | None = None
+    caption: str | None = None
+    media_type: str | None = None
     has_media: bool = False
     is_reply: bool = False
     reply_to_message_id: int | None = None
-    reply_to_message: dict[str, Any] | None = None
+    reply_to_message: ReplyToMessage | None = None
     is_forward: bool = False
-    file_id: Optional[str] = Field(
+    file_id: str | None = Field(
         default=None, description="Telegram file_id (session-specific, can download)"
     )
-    file_unique_id: Optional[str] = Field(
+    file_unique_id: str | None = Field(
         default=None,
         description="Telegram file_unique_id (permanent, content-based dedup key)",
     )
@@ -94,7 +96,7 @@ class MessageEvent(TelegramEvent):
         default="pending",
         description='Media availability: "pending" or "ready"',
     )
-    media_url: Optional[str] = Field(
+    media_url: str | None = Field(
         default=None,
         description="URL to fetch the media via tg-if HTTP proxy",
     )
@@ -106,7 +108,7 @@ class CommandEvent(TelegramEvent):
     event_type: EventType = EventType.COMMAND
     message_id: int
     reply_to_message_id: int | None = None
-    reply_to_message: dict[str, Any] | None = None
+    reply_to_message: ReplyToMessage | None = None
     command: str = Field(..., description="Command without slash, e.g., 'start'")
     command_args: list[str] = Field(
         default_factory=list, description="Arguments after command"
@@ -120,7 +122,7 @@ class CallbackQueryEvent(TelegramEvent):
     event_type: EventType = EventType.CALLBACK_QUERY
     callback_id: str = Field(..., description="Telegram callback query ID")
     callback_data: str = Field(..., description="Data attached to button")
-    message_id: Optional[int] = None
+    message_id: int | None = None
 
 
 class EditedMessageEvent(TelegramEvent):
@@ -128,18 +130,18 @@ class EditedMessageEvent(TelegramEvent):
 
     event_type: EventType = EventType.EDITED_MESSAGE
     message_id: int
-    text: Optional[str] = None
-    caption: Optional[str] = None
-    media_type: Optional[str] = None
+    text: str | None = None
+    caption: str | None = None
+    media_type: str | None = None
     has_media: bool = False
     is_reply: bool = False
     reply_to_message_id: int | None = None
-    reply_to_message: dict[str, Any] | None = None
+    reply_to_message: ReplyToMessage | None = None
     is_forward: bool = False
-    file_id: Optional[str] = Field(
+    file_id: str | None = Field(
         default=None, description="Telegram file_id (session-specific, can download)"
     )
-    file_unique_id: Optional[str] = Field(
+    file_unique_id: str | None = Field(
         default=None,
         description="Telegram file_unique_id (permanent, content-based dedup key)",
     )
@@ -147,7 +149,7 @@ class EditedMessageEvent(TelegramEvent):
         default="pending",
         description='Media availability: "pending" or "ready"',
     )
-    media_url: Optional[str] = Field(
+    media_url: str | None = Field(
         default=None,
         description="URL to fetch the media via tg-if HTTP proxy",
     )
@@ -159,7 +161,7 @@ class EditedCommandEvent(TelegramEvent):
     event_type: EventType = EventType.EDITED_MESSAGE
     message_id: int
     reply_to_message_id: int | None = None
-    reply_to_message: dict[str, Any] | None = None
+    reply_to_message: ReplyToMessage | None = None
     command: str = Field(..., description="Command without slash, e.g., 'start'")
     command_args: list[str] = Field(
         default_factory=list, description="Arguments after command"
@@ -201,7 +203,7 @@ class MediaConfigRule(BaseModel):
     """Rule controlling eager/lazy media download behavior."""
 
     scope: MediaScope
-    scope_id: Optional[str] = Field(
+    scope_id: str | None = Field(
         default=None, description="chat_id or user_id; None for global"
     )
     content_types: list[str] = Field(
@@ -341,7 +343,7 @@ class ExportCheckpoint(BaseModel):
     progress_chat_id: int | None = None
     since_msg_id: int | None = None
     since_date: str | None = None
-    bot_name: str = ""
+    bot_name: str | None = None
     saved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

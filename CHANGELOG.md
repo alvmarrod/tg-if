@@ -2,6 +2,112 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-29
+
+### Changed
+
+- CQ-39: `Publisher.publish()` now reuses a persistent AMQP channel instead of
+  opening/closing a channel per message. A new `close()` method is added for
+  cleanup and is called during `ReceiverService.shutdown()`. This eliminates
+  the per-message channel overhead in the hot path.
+- CQ-40: `DiskStorage` file I/O (`store`, `retrieve`, `delete`, `stat`) migrated
+  from synchronous `pathlib` calls to `aiofiles` async open/read/write/unlink/stat,
+  removing blocking I/O from the async hot path. `aiofiles` added as a core
+  dependency.
+- CQ-41: `UploadRegistry` SQLite operations (`connect`, `close`, `register`,
+  `get_by_hash`, `list_all`, `delete`, `delete_by_bot`, `purge_all`,
+  `update_file_id`, `touch_usage`) converted to async methods using
+  `asyncio.to_thread`. All callers (receiver service, response consumer,
+  upload routes, admin commands) updated to `await` registry calls.
+- CQ-42: `_health_monitor` loop now doubles the sleep interval (60s → 120s →
+  240s → max 300s) when all components are healthy, and resets to 60s
+  immediately when any component is unhealthy. Reduces idle polling overhead.
+- CQ-43: `_export_messages` file handles are now managed via `contextlib.ExitStack`
+  instead of a manually-tracked `open_files` dict with a final close loop.
+  Files are properly closed on any exit path (normal, exception, or
+  `CancelledError`), preventing file descriptor leaks on cancellation.
+- Code quality sweep across 33 files: type hint refinements, pre-commit hook
+  alignment, mypy strict-mode compliance fixes, linting and formatting
+  consistency improvements, and test corrections to match updated signatures.
+  No behavioural changes.
+
+### Fixed
+
+- `ReceiverService.start()` no longer crashes on a single bot failure: failed
+  bots are removed from `self._clients` and the rest continue; the admin
+  notifier is alerted. User client failure also degrades gracefully by
+  setting `self._user_client = None` instead of crashing.
+- `ReceiverService.start()` now cleans up previously started consumers when a
+  later consumer fails to start, preventing orphaned consumers from running.
+- Added pre-commit hooks CQ-25 through CQ-31: `check-added-large-files`,
+  `check-merge-conflict`, `check-json`, `check-yaml`, `check-toml`,
+  `mixed-line-ending`, `trailing-whitespace`, `debug-statements`.
+- CQ-32–CQ-38 CI/CD: Added CI workflow (lint, typecheck, unit tests w/ coverage
+  threshold 80%, integration tests, bandit, pip-audit, Python 3.12/3.13 matrix,
+  uv caching), release workflow (Docker build & push to GHCR on tag v*),
+  Dependabot config (pip, GHA, Docker).
+- Added `bandit`, `pip-audit`, and `hypothesis` to dev dependencies.
+- CQ-24: Added `--cov=src --cov-report=term-missing` to pytest `addopts` in
+  `pyproject.toml` for local coverage reporting.
+- CQ-23: Added 14 property-based tests for `_match_condition` covering
+  determinism, monotonicity (adding conditions never creates a match),
+  per-key opposite values, media dependency, text/caption edge cases, and
+  unknown-key tolerance.
+- CQ-17: Added 11 unit tests for `health.py` covering `handle_health` (all
+  broker/client combinations, error paths), `handle_metrics`, and
+  `create_health_server` lifecycle.
+- CQ-18: Added 8 unit tests for `metrics_exporter.py` covering Prometheus text
+  format, all 9 expected metric names, uptime value, and counter/gauge
+  behavior on separate registries.
+- CQ-20: Added 2 unit tests for `main.py` covering start/stop lifecycle and
+  start-failure propagation.
+- CQ-22: Added 17 unit tests to `test_chat_exporter.py` covering `_media_extension`
+  mime-type mapping edge cases, `_extract_media_info` for video/audio,
+  `_save_checkpoint` with no current chat, corrupt checkpoint loading,
+  nonexistent checkpoint deletion, `_find_bot_name` for user/unknown,
+  `_resolve_client` returning None, and `_user_client_for_export` history
+  failure path.
+- Fixed `main.py` mypy errors (removed unused type annotation on `logger`,
+  fixed `LogBuffer.processor` signature to use `MutableMapping`).
+- `_on_media_config_message` no longer re-raises on validation failure: invalid
+  messages are logged, admin-notified, and dropped — instead of triggering the
+  consumer's retry loop for a permanently invalid message.
+- Added dead-letter queue (`tg-if.dlq` exchange, `dead-letter` queue): messages
+  that exceed max retries in `Consumer` are published with error metadata and
+  source queue name for manual inspection, instead of being silently dropped
+- `EventDispatcher.dispatch` now catches publish failures instead of letting
+  the exception propagate uncaught through the Telegram event handler
+- Added typed domain schemas: `FromUser`, `ReplyToMessage`, `ChatDialog`,
+  `EventEnvelope`, and `MediaRawInfo` TypedDicts in `domain/schemas.py`,
+  reducing `dict[str, Any]` usage from 59 to 37 sites across `src/`. Updated
+  `handlers.py` constructors, `dispatcher.py` envelope builder, `client.py`
+  chat registries, and `health.py` client map to use concrete types.
+- Migrated all `Optional[X]` to `X | None` syntax in `domain/entities.py` (19
+  fields) and `app/subscriber_command_handler.py` (1 parameter), with
+  `from __future__ import annotations` added for PEP 604 compatibility
+- Added `TelegramClient.download_media_in_memory()` public method so callers
+  no longer access `client._client` private attribute directly (fixes
+  `endpoint.py` private-attribute access, resolves CQ-09)
+- Eliminated all 5 `# type: ignore` comments in `src/`: made `handle_metrics`
+  async (health.py), switched `hasattr` to `isinstance` for type narrowing
+  (endpoint.py), fixed `AppKey` import path (upload_routes.py), used `Any`
+  typed alias for PyroTGFork internal module access (client.py), added
+  `last_exc is not None` guard (consumer.py). Source tree now mypy-clean with
+  zero suppressions.
+- `UploadRegistry.delete()` and `purge_all()` in `sqlite.py` had unreachable
+  duplicate blocks after `return` statements (dead code)
+- `endpoint.py` checked `if not await storage.store(...)` against a `str` return
+  value — non-empty path strings are always truthy, so the failure branch was
+  never taken
+- `Publisher.publish()` declared exchange `tg-if.events` as `FANOUT` instead of
+  `TOPIC`, breaking topic-based routing — all published messages went to every
+  bound queue regardless of routing key
+- `main.py` shutdown: `asyncio.create_task(service.stop())` was scheduled
+  immediately after `service.start()`, causing the service to stop right away
+  regardless of signals. Signal handlers that set `stop_event` were dead code.
+  Now `service.stop()` is only called after `stop_event.wait()` returns,
+  so `SIGINT`/`SIGTERM` properly drive graceful shutdown.
+
 ## [0.11.0] - 2026-07-21
 
 ### Added

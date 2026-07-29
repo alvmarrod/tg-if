@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from typing import Any
 
@@ -23,11 +25,13 @@ class SubscriberCommandHandler:
         clients: dict[str, TelegramClient],
         manager: RabbitMQManager,
     ) -> None:
+        """Initialize the subscriber command handler."""
         self._registry = registry
         self._clients = clients
         self._manager = manager
 
     async def handle(self, body: dict[str, Any]) -> None:
+        """Handle a subscriber command envelope."""
         try:
             envelope = SubscriberCommandEnvelope.model_validate(body)
         except Exception:
@@ -66,18 +70,20 @@ class SubscriberCommandHandler:
         if result.status == "ok":
             merged = self._registry.get_commands(envelope.bot_id)
             try:
-                await client.set_bot_commands(
-                    [(c["command"], c["description"]) for c in merged]
-                )
-            except Exception:
+                commands = [(c["command"], c["description"]) for c in merged]
+                await client.set_bot_commands(commands)
+            except Exception as e:
                 logger.exception(
                     "set_bot_commands failed after registration",
                     bot_id=envelope.bot_id,
+                    error=str(e),
                 )
                 result = SubscriberCommandResponse(
                     status="nok",
                     conflicts=["set_bot_commands call failed"],
                 )
+                await self._reply(envelope.reply_to, result)
+                return
 
         await self._reply(envelope.reply_to, result)
 
@@ -86,6 +92,7 @@ class SubscriberCommandHandler:
         reply_to: str | None,
         response: SubscriberCommandResponse,
     ) -> None:
+        """Reply to a subscriber command with the given response."""
         if not reply_to:
             return
         conn = self._manager.connection

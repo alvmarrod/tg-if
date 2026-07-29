@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import json
+import re
 from typing import Any
 
 import structlog
@@ -111,6 +111,12 @@ TRANSIENT_ERRORS = (
 
 TERMINAL_DELETE_ERRORS = (MessageDeleteForbidden,)
 
+
+def _error_type_name(exc: Exception) -> str:
+    """Convert CamelCase exception class name to SCREAMING_SNAKE_CASE."""
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", exc.__class__.__name__).upper()
+
+
 logger = structlog.get_logger()
 
 
@@ -157,15 +163,17 @@ class ResponseConsumer:
 
         await self._send(client, response)
 
-    async def _resolve_upload(self, bot_id: str, value: str) -> tuple[str, str | None]:
-        if not value.startswith("upl_"):
+    async def _resolve_upload(
+        self, bot_id: str, value: str | None
+    ) -> tuple[str | None, str | None]:
+        if value is None or not value.startswith("upl_"):
             return value, None
         content_hash = value[4:]
         if self._registry is not None:
-            entry = await asyncio.to_thread(self._registry.get_by_hash, content_hash)
+            entry = await self._registry.get_by_hash(content_hash)
             if entry is not None:
                 if entry.file_id is not None:
-                    await asyncio.to_thread(self._registry.touch_usage, content_hash)
+                    await self._registry.touch_usage(content_hash)
                     return entry.file_id, content_hash
         if self._upload_storage is not None:
             path = await self._upload_storage.path_for(bot_id, content_hash)
@@ -184,6 +192,15 @@ class ResponseConsumer:
         result: Any,
         rtype: str,
     ) -> list[tuple[str, str]]:
+        """Extract file_id and file_unique_id from a media object.
+
+        Args:
+            result: The media object (photo, video, document, or audio)
+            rtype: The response type (photo, video, document, or audio)
+
+        Returns:
+            List of (file_id, file_unique_id) tuples
+        """
         media_attr = {
             "photo": "photo",
             "video": "video",
@@ -268,7 +285,7 @@ class ResponseConsumer:
                 bot_id=response.bot_id,
                 response_type=response.response_type,
             )
-            message_id = getattr(result, "id", None) if result is not None else None
+            message_id = getattr(result, "id", None)
             await self._publish_result(
                 response.reply_to,
                 OutgoingResponseResult(
@@ -295,7 +312,7 @@ class ResponseConsumer:
                 "terminal delete error, not retrying",
                 bot_id=response.bot_id,
                 response_type=response.response_type,
-                error_type=exc.ID,
+                error_type=_error_type_name(exc),
             )
             await self._publish_result(
                 response.reply_to,
@@ -305,7 +322,7 @@ class ResponseConsumer:
                     bot_id=response.bot_id,
                     chat_id=response.chat_id,
                     status="failed",
-                    error_type=exc.ID,
+                    error_type=_error_type_name(exc),
                     error_message=str(exc),
                 ),
             )
@@ -314,7 +331,7 @@ class ResponseConsumer:
                 "terminal send error, not retrying",
                 bot_id=response.bot_id,
                 response_type=response.response_type,
-                error_type=exc.ID,
+                error_type=_error_type_name(exc),
             )
             await self._publish_result(
                 response.reply_to,
@@ -324,7 +341,7 @@ class ResponseConsumer:
                     bot_id=response.bot_id,
                     chat_id=response.chat_id,
                     status="failed",
-                    error_type=exc.ID,
+                    error_type=_error_type_name(exc),
                     error_message=str(exc),
                 ),
             )
@@ -351,15 +368,15 @@ class ResponseConsumer:
             file_ids = self._extract_file_id(result, rtype)
         if not file_ids or not resolved_hashes:
             return
-        for entry_hash, (fid, fuid) in zip(resolved_hashes, file_ids):
-            await asyncio.to_thread(
-                self._registry.update_file_id, entry_hash, fid, fuid
-            )
-            logger.info(
-                "file_id registered for upload",
-                content_hash=entry_hash,
-                file_id=fid,
-            )
+        for i, entry_hash in enumerate(resolved_hashes):
+            if i < len(file_ids):
+                fid, fuid = file_ids[i]
+                await self._registry.update_file_id(entry_hash, fid, fuid)
+                logger.info(
+                    "file_id registered for upload",
+                    content_hash=entry_hash,
+                    file_id=fid,
+                )
 
     async def _publish_result(
         self,
@@ -369,7 +386,7 @@ class ResponseConsumer:
         if not reply_to:
             return
         conn = self._manager.connection
-        if not conn or conn.is_closed:
+        if conn is None or conn.is_closed:
             logger.warning("cannot publish result: broker not connected")
             return
         channel = await conn.channel()

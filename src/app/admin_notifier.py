@@ -14,26 +14,52 @@ logger = structlog.get_logger()
 
 def _format_signal(signal_type: AdminSignalType, **kwargs: Any) -> str:
     if signal_type == AdminSignalType.RESPONSE_FAILED:
-        body = kwargs.get("body", {})
-        exc = kwargs.get("exc", "")
+        body = kwargs.get("body")
+        if body is None:
+            raise ValueError("RESPONSE_FAILED signal requires 'body'")
+        exc = kwargs.get("exc")
+        if exc is None:
+            raise ValueError("RESPONSE_FAILED signal requires 'exc'")
+        bot_id = body.get("bot_id")
+        if bot_id is None:
+            raise ValueError("RESPONSE_FAILED signal requires 'bot_id' in body")
+        response_type = body.get("response_type")
+        if response_type is None:
+            raise ValueError("RESPONSE_FAILED signal requires 'response_type' in body")
+        chat_id = body.get("chat_id")
+        if chat_id is None:
+            raise ValueError("RESPONSE_FAILED signal requires 'chat_id' in body")
+        response_id = body.get("response_id")
+        if response_id is None:
+            raise ValueError("RESPONSE_FAILED signal requires 'response_id' in body")
         return (
             f"⚠️ Response Failed\n"
-            f"Bot: {body.get('bot_id', '?')}\n"
-            f"Type: {body.get('response_type', '?')}\n"
-            f"Chat: {body.get('chat_id', '?')}\n"
+            f"Bot: {bot_id}\n"
+            f"Type: {response_type}\n"
+            f"Chat: {chat_id}\n"
             f"Error: {exc}\n"
-            f"ID: {body.get('response_id', '?')}"
+            f"ID: {response_id}"
         )
 
     if signal_type == AdminSignalType.COMPONENT_CONNECTED:
-        return f"✅ {kwargs.get('component', '?')} connected"
+        component = kwargs.get("component")
+        if component is None:
+            raise ValueError("COMPONENT_CONNECTED signal requires 'component'")
+        return f"✅ {component} connected"
 
     if signal_type == AdminSignalType.COMPONENT_DISCONNECTED:
-        return f"❌ {kwargs.get('component', '?')} disconnected"
+        component = kwargs.get("component")
+        if component is None:
+            raise ValueError("COMPONENT_DISCONNECTED signal requires 'component'")
+        return f"❌ {component} disconnected"
 
     if signal_type == AdminSignalType.CONFIG_WARNING:
-        msg = kwargs.get("message", "?")
-        body = kwargs.get("body", {})
+        msg = kwargs.get("message")
+        if msg is None:
+            raise ValueError("CONFIG_WARNING signal requires 'message'")
+        body = kwargs.get("body")
+        if body is None:
+            raise ValueError("CONFIG_WARNING signal requires 'body'")
         return f"⚠️ Config Warning\nMessage: {msg}\nBody: {body}"
 
     return f"Unknown signal: {signal_type}"
@@ -45,6 +71,7 @@ class AdminNotifier:
         config: AdminBotConfig,
         client: TelegramClient | None = None,
     ) -> None:
+        """Initialize the admin notifier."""
         self._config = config
         self._user_id = config.user_id
         if client is not None:
@@ -59,17 +86,21 @@ class AdminNotifier:
             self._client = TelegramClient(bot_cfg)
 
     async def start(self) -> None:
+        """Start the admin notifier."""
         await self._client.start()
 
     async def stop(self) -> None:
+        """Stop the admin notifier."""
         await self._client.stop()
 
     async def health(self) -> bool:
+        """Check if the admin notifier is healthy."""
         return await self._client.health()
 
     async def notify(self, signal_type: AdminSignalType, **kwargs: Any) -> None:
-        text = _format_signal(signal_type, **kwargs)
+        """Send an admin notification."""
         try:
+            text = _format_signal(signal_type, **kwargs)
             await self._client.send_text(self._user_id, text)
             logger.info("admin notification sent", signal=signal_type.value)
         except Exception:
