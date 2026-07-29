@@ -83,6 +83,10 @@ class AppConfig(BaseModel):
     bots: list[BotConfig] = Field(default_factory=list)
     admin: AdminBotConfig | None = None
     user_account: UserAccountConfig | None = None
+    upload_rate_limit: int = Field(
+        default=30,
+        description="Max upload requests per minute per IP (0 = disabled)",
+    )
 
 
 class ConfigLoader:

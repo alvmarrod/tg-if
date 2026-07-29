@@ -104,10 +104,10 @@
 | CQ-45 | Split `receiver_service.py` (465 lines) — extract wiring from lifecycle | Medium |
 | CQ-46 | Add `docker-compose.yml` with RabbitMQ for local dev | Small |
 | CQ-47 | Add OpenTelemetry tracing for end-to-end visibility | Large |
-| CQ-48 | Sync version across `version.txt`, `pyproject.toml`, `main.py`; read from single source | Small |
+| CQ-48 | Sync version across `version.txt`, `pyproject.toml`, `main.py`; read from single source | Small ✅ |
 | CQ-49 | Add LRU eviction or TTL to `DiskStorage._accesses` / `_last_access` dicts | Medium |
-| CQ-50 | Document HTTP endpoint threat model (/health, /files/, /upload/ have no auth) | Small |
-| CQ-51 | Add rate limiting to `/upload/` endpoint | Medium |
+| CQ-50 | Document HTTP endpoint threat model (/health, /files/, /upload/ have no auth) | Small ✅ |
+| CQ-51 | Add rate limiting to `/upload/` endpoint | Medium ✅ |
 | CQ-52 | Fix session file race during rolling deployments | Medium |
 
 ---

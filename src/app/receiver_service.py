@@ -435,6 +435,7 @@ class ReceiverService:
             upload_registry=self._upload_registry,
             upload_storage=self._upload_storage,
             max_upload_size=self._config.max_upload_size,
+            upload_rate_limit=self._config.upload_rate_limit,
             clients=list(self._clients.values()),
             client_map=self._clients,
             broker=self._manager,

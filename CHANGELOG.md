@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-29
+
+### Changed
+
+- CQ-48: Version is now read from `version.txt` as the single source of truth.
+  Created `src/infrastructure/version.py` with a `get_version()` function that
+  reads `version.txt` at runtime. `main.py` uses this instead of a hardcoded
+  string. `pyproject.toml` and `version.txt` synced to `0.13.0`.
+
+### Added
+
+- CQ-50: Added `doc/http_threat_model.md` documenting the unauthenticated HTTP
+  endpoints (`/health`, `/metrics`, `/files/`, `/upload/`), their threat actors,
+  and recommended deployment topology with a reverse proxy.
+- CQ-51: Rate limiting on `POST /upload/` endpoint via a sliding-window
+  per-IP limiter. Configured via `AppConfig.upload_rate_limit` (default 30
+  requests per minute per IP, set to 0 to disable). Includes `X-Forwarded-For`
+  support for reverse-proxy deployments.
+
 ## [0.12.0] - 2026-07-29
 
 ### Changed
