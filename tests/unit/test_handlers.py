@@ -18,6 +18,7 @@ from infrastructure.telegram.handlers import (
     context_from_reaction_updated,
     edited_message_to_event,
     extract_routing_context,
+    lock_session_file,
     message_to_event,
     parse_session_path,
     reaction_count_updated_to_event,
@@ -615,3 +616,20 @@ class TestParseSessionPath:
         name, parent = parse_session_path("sessions/bot_no_ext")
         assert name == "bot_no_ext"
         assert parent == "sessions"
+
+
+class TestSessionLock:
+    def test_acquires_and_releases_lock(self, tmp_path: Any) -> None:
+        session_path = str(tmp_path / "test.session")
+        unlock = lock_session_file(session_path)
+        assert callable(unlock)
+        lock_file = tmp_path / "test.session.lock"
+        assert lock_file.exists()
+        unlock()
+        unlock()
+
+    def test_concurrent_lock_fails(self, tmp_path: Any) -> None:
+        session_path = str(tmp_path / "shared.session")
+        lock_session_file(session_path)
+        with pytest.raises(RuntimeError, match="Could not acquire session lock"):
+            lock_session_file(session_path, timeout=0.1)

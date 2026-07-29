@@ -20,6 +20,11 @@
   per-IP limiter. Configured via `AppConfig.upload_rate_limit` (default 30
   requests per minute per IP, set to 0 to disable). Includes `X-Forwarded-For`
   support for reverse-proxy deployments.
+- CQ-52: Session file locking via `fcntl.flock` to prevent race conditions
+  during rolling deployments. `TelegramClient.start()` acquires an exclusive
+  lock on `{session_file}.lock` before starting Pyrogram, and releases it on
+  `stop()`. If another instance holds the lock, the second instance raises
+  `RuntimeError` after a 30s timeout.
 
 ## [0.12.0] - 2026-07-29
 

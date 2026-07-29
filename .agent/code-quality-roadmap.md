@@ -108,7 +108,7 @@
 | CQ-49 | Add LRU eviction or TTL to `DiskStorage._accesses` / `_last_access` dicts | Medium |
 | CQ-50 | Document HTTP endpoint threat model (/health, /files/, /upload/ have no auth) | Small ✅ |
 | CQ-51 | Add rate limiting to `/upload/` endpoint | Medium ✅ |
-| CQ-52 | Fix session file race during rolling deployments | Medium |
+| CQ-52 | Fix session file race during rolling deployments | Medium ✅ |
 
 ---
 
