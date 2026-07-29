@@ -39,6 +39,8 @@ disable_error_code = ["method-assign", "attr-defined"]
 [dependency-groups]
 dev = [
     "mypy>=2.1.0",
+    "pytest-timeout>=2.4.0",
+    "types-aiofiles>=25.1.0.20260518",
 ]
 
 [project.optional-dependencies]
