@@ -90,7 +90,7 @@
 |---|-------|--------|--------|
 | CQ-39 | `Publisher.publish()` opens/closes channel per message | Use persistent channel instead | Medium ✅ |
 | CQ-40 | `DiskStorage` uses sync I/O (`write_bytes`, `read_bytes`) in async context | Use `aiofiles` | Medium ✅ |
-| CQ-41 | UploadRegistry SQLite ops not wrapped in `asyncio.to_thread` | Wrap all DB calls | Small |
+| CQ-41 | UploadRegistry SQLite ops not wrapped in `asyncio.to_thread` | Wrap all DB calls | Small ✅ |
 | CQ-42 | Health monitor polls every 60s unconditionally | Add exponential backoff for healthy bots | Small ✅ |
 | CQ-43 | Chat exporter file handles may leak on cancellation | Use context managers for file handles | Small ✅ |
 

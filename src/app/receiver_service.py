@@ -387,7 +387,7 @@ class ReceiverService:
                 )
                 self._user_client = None
 
-        self._upload_registry.connect()
+        await self._upload_registry.connect()
 
         try:
             await self._consumer.start()
@@ -475,7 +475,7 @@ class ReceiverService:
         if self._sub_cmd_consumer is not None:
             await self._sub_cmd_consumer.stop()
         await self._consumer.stop()
-        self._upload_registry.close()
+        await self._upload_registry.close()
         await self._publisher.close()
         await self._manager.disconnect()
         self._running = False

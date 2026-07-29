@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import os
 
@@ -187,7 +186,7 @@ async def handle_upload_post(request: web.Request) -> web.Response:
     upload_id = f"upl_{content_hash}"
 
     try:
-        entry = await asyncio.to_thread(registry.get_by_hash, content_hash)
+        entry = await registry.get_by_hash(content_hash)
     except Exception as e:
         logger.error(
             "upload registry lookup failed",
@@ -238,7 +237,7 @@ async def handle_upload_post(request: web.Request) -> web.Response:
         ext=ext,
         size=len(data),
     )
-    await asyncio.to_thread(registry.register, upload_entry)
+    await registry.register(upload_entry)
 
     logger.info(
         "upload stored",

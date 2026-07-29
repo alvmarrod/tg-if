@@ -89,12 +89,12 @@ async def reg_storage() -> AsyncGenerator[tuple[UploadRegistry, DiskStorage], No
     tmp = TemporaryDirectory()
     db_path = str(Path(tmp.name) / "uploads.db")
     reg = UploadRegistry(db_path)
-    reg.connect()
+    await reg.connect()
     storage = DiskStorage(tmp.name)
     try:
         yield reg, storage
     finally:
-        reg.close()
+        await reg.close()
         tmp.cleanup()
 
 
@@ -167,7 +167,7 @@ class TestUploadIntegration:
 
             # After send, file_id was extracted and registry updated
             content_hash = upload_id[4:]
-            entry = reg.get_by_hash(content_hash)
+            entry = await reg.get_by_hash(content_hash)
             assert entry is not None
             assert entry.file_id == "AgAC_test"
             assert entry.file_unique_id == "QQAD_test"
@@ -186,7 +186,7 @@ class TestUploadIntegration:
         clients["aibot"].send_photo.side_effect = _make_send_photo(done)
 
         content_hash = "pretend_fast_hash"
-        reg.register(
+        await reg.register(
             UploadEntry(
                 content_hash=content_hash,
                 bot_id="aibot",
@@ -194,7 +194,7 @@ class TestUploadIntegration:
                 size=456,
             )
         )
-        reg.update_file_id(content_hash, "AgAC_pre_existing", "QQAD_pre_existing")
+        await reg.update_file_id(content_hash, "AgAC_pre_existing", "QQAD_pre_existing")
 
         consumer = ResponseConsumer(
             clients, manager, registry=reg, upload_storage=storage

@@ -821,7 +821,7 @@ class AdminCommandHandler:
         sort_spec = kwargs.get("sort") or "uses:desc"
         bot_filter = kwargs.get("bot")
 
-        entries = self._upload_registry.list_all(bot_id=bot_filter)
+        entries = await self._upload_registry.list_all(bot_id=bot_filter)
         if not entries:
             await self._admin.send_text(chat_id, "No upload records")
             return
@@ -922,7 +922,7 @@ class AdminCommandHandler:
             )
             return
 
-        entries = self._upload_registry.list_all(bot_id=bot_filter)
+        entries = await self._upload_registry.list_all(bot_id=bot_filter)
         if not entries:
             await self._admin.send_text(chat_id, "No upload records to prune")
             return
@@ -961,7 +961,7 @@ class AdminCommandHandler:
                     content_hash=e.content_hash,
                     exc_info=True,
                 )
-            self._upload_registry.delete(e.content_hash)
+            await self._upload_registry.delete(e.content_hash)
             deleted += 1
 
         await self._admin.send_text(
@@ -976,7 +976,7 @@ class AdminCommandHandler:
         kwargs = _parse_kwargs(args)
         bot_filter = kwargs.get("bot")
 
-        entries = self._upload_registry.list_all(bot_id=bot_filter)
+        entries = await self._upload_registry.list_all(bot_id=bot_filter)
         if not entries:
             await self._admin.send_text(chat_id, "No upload records to purge")
             return
@@ -1003,7 +1003,7 @@ class AdminCommandHandler:
                     content_hash=e.content_hash,
                     exc_info=True,
                 )
-            self._upload_registry.delete(e.content_hash)
+            await self._upload_registry.delete(e.content_hash)
             deleted += 1
 
         await self._admin.send_text(

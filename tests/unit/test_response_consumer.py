@@ -49,9 +49,9 @@ def mock_manager() -> MagicMock:
 @pytest.fixture
 def mock_registry() -> MagicMock:
     m = MagicMock(spec=UploadRegistry)
-    m.get_by_hash = MagicMock()
-    m.touch_usage = MagicMock()
-    m.update_file_id = MagicMock()
+    m.get_by_hash = AsyncMock()
+    m.touch_usage = AsyncMock()
+    m.update_file_id = AsyncMock()
     return m
 
 

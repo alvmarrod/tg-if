@@ -14,6 +14,11 @@
   from synchronous `pathlib` calls to `aiofiles` async open/read/write/unlink/stat,
   removing blocking I/O from the async hot path. `aiofiles` added as a core
   dependency.
+- CQ-41: `UploadRegistry` SQLite operations (`connect`, `close`, `register`,
+  `get_by_hash`, `list_all`, `delete`, `delete_by_bot`, `purge_all`,
+  `update_file_id`, `touch_usage`) converted to async methods using
+  `asyncio.to_thread`. All callers (receiver service, response consumer,
+  upload routes, admin commands) updated to `await` registry calls.
 - CQ-42: `_health_monitor` loop now doubles the sleep interval (60s → 120s →
   240s → max 300s) when all components are healthy, and resets to 60s
   immediately when any component is unhealthy. Reduces idle polling overhead.

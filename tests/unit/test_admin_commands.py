@@ -646,9 +646,9 @@ class TestUploadAdminCommands:
     @property
     def mock_registry(self) -> MagicMock:
         m = MagicMock()
-        m.list_all = MagicMock(return_value=[])
-        m.delete = MagicMock(return_value=True)
-        m.purge_all = MagicMock(return_value=0)
+        m.list_all = AsyncMock(return_value=[])
+        m.delete = AsyncMock(return_value=True)
+        m.purge_all = AsyncMock(return_value=0)
         return m
 
     @property

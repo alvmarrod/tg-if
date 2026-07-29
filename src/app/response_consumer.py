@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from typing import Any
@@ -171,10 +170,10 @@ class ResponseConsumer:
             return value, None
         content_hash = value[4:]
         if self._registry is not None:
-            entry = await asyncio.to_thread(self._registry.get_by_hash, content_hash)
+            entry = await self._registry.get_by_hash(content_hash)
             if entry is not None:
                 if entry.file_id is not None:
-                    await asyncio.to_thread(self._registry.touch_usage, content_hash)
+                    await self._registry.touch_usage(content_hash)
                     return entry.file_id, content_hash
         if self._upload_storage is not None:
             path = await self._upload_storage.path_for(bot_id, content_hash)
@@ -372,9 +371,7 @@ class ResponseConsumer:
         for i, entry_hash in enumerate(resolved_hashes):
             if i < len(file_ids):
                 fid, fuid = file_ids[i]
-                await asyncio.to_thread(
-                    self._registry.update_file_id, entry_hash, fid, fuid
-                )
+                await self._registry.update_file_id(entry_hash, fid, fuid)
                 logger.info(
                     "file_id registered for upload",
                     content_hash=entry_hash,

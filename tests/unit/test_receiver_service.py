@@ -82,7 +82,7 @@ class TestStart:
         svc._manager.connection = conn
         svc._consumer = AsyncMock()
         svc._consumer.start = AsyncMock()
-        svc._upload_registry.connect = MagicMock()
+        svc._upload_registry.connect = AsyncMock()
         for client in svc._clients.values():
             client.start = AsyncMock()
 
@@ -104,11 +104,11 @@ class TestStart:
         with (
             patch.object(svc, "_manager", AsyncMock()),
             patch.object(svc, "_consumer", mock_consumer),
-            patch.object(svc, "_upload_registry", MagicMock()),
+            patch.object(svc, "_upload_registry", AsyncMock()),
             patch("app.receiver_service.Consumer", return_value=mock_consumer),
             patch("app.receiver_service.create_health_server") as mock_hs,
         ):
-            svc._upload_registry.connect = MagicMock()
+            svc._upload_registry.connect = AsyncMock()
             mock_hs.return_value = AsyncMock()
             for client in svc._clients.values():
                 client.start = AsyncMock()
@@ -130,11 +130,11 @@ class TestStart:
         with (
             patch.object(svc, "_manager", AsyncMock()),
             patch.object(svc, "_consumer", mock_consumer),
-            patch.object(svc, "_upload_registry", MagicMock()),
+            patch.object(svc, "_upload_registry", AsyncMock()),
             patch("app.receiver_service.Consumer", return_value=mock_consumer),
             patch("app.receiver_service.create_health_server") as mock_hs,
         ):
-            svc._upload_registry.connect = MagicMock()
+            svc._upload_registry.connect = AsyncMock()
             mock_hs.return_value = AsyncMock()
             client = list(svc._clients.values())[0]
             client.start = AsyncMock(side_effect=Exception("auth failed"))
@@ -155,11 +155,11 @@ class TestStart:
         with (
             patch.object(svc, "_manager", AsyncMock()),
             patch.object(svc, "_consumer", mock_consumer),
-            patch.object(svc, "_upload_registry", MagicMock()),
+            patch.object(svc, "_upload_registry", AsyncMock()),
             patch("app.receiver_service.Consumer", return_value=mock_consumer),
             patch("app.receiver_service.create_health_server") as mock_hs,
         ):
-            svc._upload_registry.connect = MagicMock()
+            svc._upload_registry.connect = AsyncMock()
             mock_hs.return_value = AsyncMock()
             for client in svc._clients.values():
                 client.start = AsyncMock()
@@ -183,7 +183,7 @@ class TestShutdown:
         svc._health_task.done = MagicMock(return_value=False)
         svc._consumer = AsyncMock()
         svc._consumer.stop = AsyncMock()
-        svc._upload_registry = MagicMock()
+        svc._upload_registry = AsyncMock()
         svc._manager = AsyncMock()
         svc._clients = {"b": AsyncMock()}
         svc._clients["b"].stop = AsyncMock()
@@ -193,7 +193,7 @@ class TestShutdown:
         health_site.stop.assert_awaited_once()
         svc._consumer.stop.assert_awaited_once()
         svc._clients["b"].stop.assert_awaited_once()
-        svc._upload_registry.close.assert_called_once()
+        svc._upload_registry.close.assert_awaited_once()
         svc._manager.disconnect.assert_awaited_once()
         assert svc._running is False
 
@@ -204,7 +204,7 @@ class TestShutdown:
         svc._health_task = AsyncMock()
         svc._health_task.done = MagicMock(return_value=True)
         svc._consumer = AsyncMock()
-        svc._upload_registry = MagicMock()
+        svc._upload_registry = AsyncMock()
         svc._manager = AsyncMock()
         svc._notifier = AsyncMock()
         svc._clients = {}
@@ -222,7 +222,7 @@ class TestRestart:
         svc._health_task = AsyncMock()
         svc._health_task.done = MagicMock(return_value=True)
         svc._consumer = AsyncMock()
-        svc._upload_registry = MagicMock()
+        svc._upload_registry = AsyncMock()
         svc._manager = AsyncMock()
         svc._clients = {}
 
