@@ -463,6 +463,7 @@ class ReceiverService:
             await self._sub_cmd_consumer.stop()
         await self._consumer.stop()
         self._upload_registry.close()
+        await self._publisher.close()
         await self._manager.disconnect()
         self._running = False
         logger.info("receiver service stopped")

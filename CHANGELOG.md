@@ -6,6 +6,10 @@
 
 ### Changed
 
+- CQ-39: `Publisher.publish()` now reuses a persistent AMQP channel instead of
+  opening/closing a channel per message. A new `close()` method is added for
+  cleanup and is called during `ReceiverService.shutdown()`. This eliminates
+  the per-message channel overhead in the hot path.
 - Code quality sweep across 33 files: type hint refinements, pre-commit hook
   alignment, mypy strict-mode compliance fixes, linting and formatting
   consistency improvements, and test corrections to match updated signatures.
