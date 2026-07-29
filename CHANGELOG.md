@@ -22,6 +22,11 @@
 - Added pre-commit hooks CQ-25 through CQ-31: `check-added-large-files`,
   `check-merge-conflict`, `check-json`, `check-yaml`, `check-toml`,
   `mixed-line-ending`, `trailing-whitespace`, `debug-statements`.
+- CQ-32–CQ-38 CI/CD: Added CI workflow (lint, typecheck, unit tests w/ coverage
+  threshold 80%, integration tests, bandit, pip-audit, Python 3.12/3.13 matrix,
+  uv caching), release workflow (Docker build & push to GHCR on tag v*),
+  Dependabot config (pip, GHA, Docker).
+- Added `bandit` and `pip-audit` to dev dependencies.
 - `_on_media_config_message` no longer re-raises on validation failure: invalid
   messages are logged, admin-notified, and dropped — instead of triggering the
   consumer's retry loop for a permanently invalid message.
