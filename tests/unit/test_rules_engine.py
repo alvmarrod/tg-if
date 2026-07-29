@@ -1,3 +1,5 @@
+from typing import Any
+
 from domain.entities import (
     CallbackQueryEvent,
     ChatType,
@@ -340,3 +342,163 @@ class TestRulesEngineEvaluate:
         ]
         decision = RulesEngine.evaluate(message_event_text, private_context, rules)
         assert decision == RoutingDecision(matched=True, target="catch_all", rule_idx=1)
+
+
+class TestMatchConditionProperty:
+    def test_empty_condition_always_matches(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        assert _match_condition({}, message_event_text, ctx) is True
+
+    def test_known_keys_are_not_rejected(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        all_keys = [
+            "event_type",
+            "event_subtype",
+            "chat_type",
+            "has_media",
+            "media_type",
+            "command",
+            "command_starts_with",
+            "user_id",
+            "chat_id",
+            "is_reply",
+            "is_forward",
+            "text_contains",
+            "caption_contains",
+        ]
+        for key in all_keys:
+            cond = {key: "any_value", "another_unknown": "x"}
+            result = _match_condition(cond, message_event_text, ctx)
+            assert isinstance(result, bool)
+
+    def test_added_conditions_never_create_match(
+        self, message_event_text: MessageEvent, private_context: RoutingContext
+    ) -> None:
+        base = {"chat_type": "private"}
+        assert _match_condition(base, message_event_text, private_context) is True
+        stricter = {**base, "event_type": "callback_query"}
+        assert _match_condition(stricter, message_event_text, private_context) is False
+
+    def test_matching_condition_is_deterministic(
+        self, message_event_text: MessageEvent, private_context: RoutingContext
+    ) -> None:
+        cond = {"event_type": "message", "chat_type": "private"}
+        first = _match_condition(cond, message_event_text, private_context)
+        for _ in range(10):
+            assert _match_condition(cond, message_event_text, private_context) == first
+
+    def test_all_keys_matching_on_message_event(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(
+            chat_type=ChatType.PRIVATE,
+            has_media=False,
+            media_type=None,
+            command="hello",
+            is_reply=False,
+            is_forward=False,
+        )
+        cond: dict[str, Any] = {
+            "event_type": "message",
+            "event_subtype": "text",
+            "chat_type": "private",
+            "has_media": False,
+            "user_id": 67890,
+            "chat_id": 12345,
+            "is_reply": False,
+            "is_forward": False,
+        }
+        assert _match_condition(cond, message_event_text, ctx) is True
+
+    def test_opposite_value_for_each_key_returns_false(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        cases: list[tuple[str, Any, RoutingContext]] = [
+            (
+                "event_type",
+                "callback_query",
+                RoutingContext(chat_type=ChatType.PRIVATE),
+            ),
+            ("chat_type", "group", RoutingContext(chat_type=ChatType.PRIVATE)),
+            (
+                "has_media",
+                True,
+                RoutingContext(chat_type=ChatType.PRIVATE, has_media=False),
+            ),
+            ("user_id", 0, RoutingContext(chat_type=ChatType.PRIVATE)),
+            ("chat_id", 0, RoutingContext(chat_type=ChatType.PRIVATE)),
+            (
+                "is_reply",
+                True,
+                RoutingContext(chat_type=ChatType.PRIVATE, is_reply=False),
+            ),
+            (
+                "is_forward",
+                True,
+                RoutingContext(chat_type=ChatType.PRIVATE, is_forward=False),
+            ),
+        ]
+        for key, wrong_val, ctx in cases:
+            assert (
+                _match_condition({key: wrong_val}, message_event_text, ctx) is False
+            ), f"failed for {key}={wrong_val}"
+
+    def test_media_type_requires_has_media(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(
+            chat_type=ChatType.PRIVATE, has_media=False, media_type=None
+        )
+        assert (
+            _match_condition({"media_type": "photo"}, message_event_text, ctx) is False
+        )
+        ctx2 = RoutingContext(
+            chat_type=ChatType.PRIVATE, has_media=True, media_type="video"
+        )
+        assert (
+            _match_condition({"media_type": "video"}, message_event_text, ctx2) is True
+        )
+
+    def test_text_contains_needs_text(self, message_event_photo: MessageEvent) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        assert message_event_photo.text is None
+        assert (
+            _match_condition({"text_contains": "any"}, message_event_photo, ctx)
+            is False
+        )
+
+    def test_caption_contains_needs_caption(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        assert (
+            _match_condition({"caption_contains": "any"}, message_event_text, ctx)
+            is False
+        )
+
+    def test_command_starts_with_no_command(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        assert (
+            _match_condition({"command_starts_with": "x"}, message_event_text, ctx)
+            is False
+        )
+
+    def test_callback_data_on_non_callback(
+        self, message_event_text: MessageEvent
+    ) -> None:
+        ctx = RoutingContext(chat_type=ChatType.PRIVATE)
+        assert (
+            _match_condition({"callback_data": "x"}, message_event_text, ctx) is False
+        )
+
+    def test_unknown_key_never_fails(
+        self, message_event_text: MessageEvent, private_context: RoutingContext
+    ) -> None:
+        cond = {"event_type": "message", "unknown_key": [1, 2, 3]}
+        assert _match_condition(cond, message_event_text, private_context) is True

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import MutableMapping
 from typing import Any
 
 
@@ -21,8 +22,8 @@ class LogBuffer:
         self._buffer: deque[dict[str, Any]] = deque(maxlen=max_size)
 
     def processor(
-        self, logger: Any, method_name: str, event_dict: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+    ) -> MutableMapping[str, Any]:
         """Process and buffer a log event.
 
         Args:

@@ -39,12 +39,6 @@ class UploadRegistry:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(self._SCHEMA)
         self._conn.commit()
-        if self._conn is not None:
-            return
-        self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.executescript(self._SCHEMA)
-        self._conn.commit()
 
     def close(self) -> None:
         """Close the database connection."""
@@ -58,10 +52,7 @@ class UploadRegistry:
         assert self._conn is not None
         return self._conn
 
-    def _row_to_entry(self, row: sqlite3.Row | None) -> UploadEntry | None:
-        """Convert a database row to an UploadEntry."""
-        if row is None:
-            return None
+    def _row_to_entry(self, row: sqlite3.Row) -> UploadEntry:
         return UploadEntry(
             content_hash=row["content_hash"],
             url_hash=row["url_hash"],

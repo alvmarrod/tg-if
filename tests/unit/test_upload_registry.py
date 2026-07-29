@@ -192,3 +192,18 @@ class TestUploadRegistry:
     def test_close_idempotent(self, registry: UploadRegistry) -> None:
         registry.close()
         registry.close()
+
+    def test_connect_twice(self) -> None:
+        tmp = TemporaryDirectory()
+        db_path = str(Path(tmp.name) / "twice.db")
+        reg = UploadRegistry(db_path)
+        try:
+            reg.connect()
+            reg.connect()  # should not raise
+        finally:
+            reg.close()
+            tmp.cleanup()
+
+    def test_purge_all_empty(self, registry: UploadRegistry) -> None:
+        count = registry.purge_all()
+        assert count == 0

@@ -26,7 +26,29 @@
   threshold 80%, integration tests, bandit, pip-audit, Python 3.12/3.13 matrix,
   uv caching), release workflow (Docker build & push to GHCR on tag v*),
   Dependabot config (pip, GHA, Docker).
-- Added `bandit` and `pip-audit` to dev dependencies.
+- Added `bandit`, `pip-audit`, and `hypothesis` to dev dependencies.
+- CQ-24: Added `--cov=src --cov-report=term-missing` to pytest `addopts` in
+  `pyproject.toml` for local coverage reporting.
+- CQ-23: Added 14 property-based tests for `_match_condition` covering
+  determinism, monotonicity (adding conditions never creates a match),
+  per-key opposite values, media dependency, text/caption edge cases, and
+  unknown-key tolerance.
+- CQ-17: Added 11 unit tests for `health.py` covering `handle_health` (all
+  broker/client combinations, error paths), `handle_metrics`, and
+  `create_health_server` lifecycle.
+- CQ-18: Added 8 unit tests for `metrics_exporter.py` covering Prometheus text
+  format, all 9 expected metric names, uptime value, and counter/gauge
+  behavior on separate registries.
+- CQ-20: Added 2 unit tests for `main.py` covering start/stop lifecycle and
+  start-failure propagation.
+- CQ-22: Added 17 unit tests to `test_chat_exporter.py` covering `_media_extension`
+  mime-type mapping edge cases, `_extract_media_info` for video/audio,
+  `_save_checkpoint` with no current chat, corrupt checkpoint loading,
+  nonexistent checkpoint deletion, `_find_bot_name` for user/unknown,
+  `_resolve_client` returning None, and `_user_client_for_export` history
+  failure path.
+- Fixed `main.py` mypy errors (removed unused type annotation on `logger`,
+  fixed `LogBuffer.processor` signature to use `MutableMapping`).
 - `_on_media_config_message` no longer re-raises on validation failure: invalid
   messages are logged, admin-notified, and dropped — instead of triggering the
   consumer's retry loop for a permanently invalid message.

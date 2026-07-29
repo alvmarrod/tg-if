@@ -20,7 +20,7 @@ async def main() -> None:
         cache_logger_on_first_use=True,
     )
 
-    logger: structlog.types.BoundLogger = structlog.get_logger()
+    logger = structlog.get_logger()
 
     config = ConfigLoader.load()
     service: ReceiverService = ReceiverService(config, log_buffer=log_buffer)

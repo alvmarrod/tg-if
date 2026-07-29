@@ -190,6 +190,54 @@ class TestHelpers:
         msg = _make_msg(has_media=False)
         assert _extract_media_info(msg) is None
 
+    def test_extract_media_info_video(self) -> None:
+        msg = _make_msg(has_media=True, media_type="video", file_unique_id="fid_v")
+        info = _extract_media_info(msg)
+        assert info is not None
+        assert info["type"] == "video"
+        assert info["file_unique_id"] == "fid_v"
+
+    def test_extract_media_info_audio(self) -> None:
+        msg = _make_msg(has_media=True, media_type="audio", file_unique_id="fid_a")
+        info = _extract_media_info(msg)
+        assert info is not None
+        assert info["type"] == "audio"
+
+    def test_media_extension_document_with_mime(self) -> None:
+        msg = _make_msg(has_media=True, media_type="document")
+        msg.document.mime_type = "image/png"
+        msg.document.file_name = "photo.png"
+        assert _media_extension(msg) == ".png"
+
+    def test_media_extension_document_with_unknown_mime(self) -> None:
+        msg = _make_msg(has_media=True, media_type="document")
+        msg.document.mime_type = "application/x-sqlite3"
+        msg.document.file_name = "data.sqlite"
+        assert _media_extension(msg) == ".x-sqlite3"
+
+    def test_media_extension_document_fallback_no_mime(self) -> None:
+        msg = _make_msg(has_media=True, media_type="document")
+        msg.document.mime_type = None
+        msg.document.file_name = "archive.zip"
+        assert _media_extension(msg) == ".zip"
+
+    def test_media_extension_document_no_mime_no_filename(self) -> None:
+        msg = _make_msg(has_media=True, media_type="document")
+        msg.document.mime_type = None
+        msg.document.file_name = None
+        assert _media_extension(msg) == ".bin"
+
+    def test_media_extension_animation_with_mime(self) -> None:
+        msg = _make_msg(has_media=True, media_type="animation")
+        msg.animation.mime_type = "video/webm"
+        assert _media_extension(msg) == ".webm"
+
+    def test_media_extension_sticker_fallback(self) -> None:
+        msg = _make_msg(has_media=True, media_type="sticker")
+        msg.sticker.mime_type = None
+        msg.sticker.file_name = None
+        assert _media_extension(msg) == ".bin"
+
 
 @pytest.fixture
 def engine() -> ChatExportEngine:
@@ -436,3 +484,64 @@ class TestChatExportEngine:
 
         await engine.export_chat(chat_id=-100123, notify_chat_id=999, offset=500)
         assert hook.get("start_offset_id") == 500
+
+
+class TestChatExportEngineEdgeCases:
+    def test_save_checkpoint_no_current_chat(self, tmp_path: Path) -> None:
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        engine._progress.current_chat_id = None
+        engine._save_checkpoint()  # should not raise
+
+    def test_load_checkpoint_corrupt_json(self, tmp_path: Path) -> None:
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        path = engine._checkpoint_path(-100123)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("not valid json", encoding="utf-8")
+        cp = engine._load_checkpoint(-100123)
+        assert cp is None
+
+    def test_delete_checkpoint_nonexistent(self, tmp_path: Path) -> None:
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={})
+        engine._delete_checkpoint(-100123)  # should not raise
+
+    def test_find_bot_name_is_user(self) -> None:
+        config = AppConfig(export_storage_path="/tmp")
+        user_client = MagicMock()
+        admin = MagicMock()
+        engine = ChatExportEngine(config=config, clients={}, admin_client=admin)
+        engine._user_client = user_client
+        assert engine._find_bot_name(user_client) == "__user__"
+
+    def test_find_bot_name_unknown(self) -> None:
+        config = AppConfig(export_storage_path="/tmp")
+        engine = ChatExportEngine(config=config, clients={})
+        stranger = MagicMock()
+        assert engine._find_bot_name(stranger) == "unknown"
+
+    async def test_resolve_client_returns_none_when_no_match(self) -> None:
+        config = AppConfig(export_storage_path="/tmp")
+        bot_client = MagicMock()
+        bot_client.known_chats = [{"chat_id": -100111, "title": "Other"}]
+        engine = ChatExportEngine(config=config, clients={"bot_a": bot_client})
+        result = await engine._resolve_client(-100999)
+        assert result is None
+
+    def test_send_progress_message_no_admin(self, tmp_path: Path) -> None:
+        config = AppConfig(export_storage_path=str(tmp_path))
+        engine = ChatExportEngine(config=config, clients={}, admin_client=None)
+        # Should not raise even though admin is None
+        engine._progress_msg_id = None
+        engine._progress_chat_id = None
+
+    async def test_user_client_for_export_history_fails(self) -> None:
+        config = AppConfig(export_storage_path="/tmp")
+        engine = ChatExportEngine(config=config, clients={})
+        user_client = AsyncMock()
+        user_client.bot_id = "__user__"
+        user_client.get_chat_history = AsyncMock(side_effect=Exception("access denied"))
+        engine._user_client = user_client
+        with pytest.raises(RuntimeError, match="User client cannot access chat"):
+            await engine._user_client_for_export(-100123)

@@ -87,11 +87,13 @@ class AppConfig(BaseModel):
 
 class ConfigLoader:
     @staticmethod
-    def _env_str(key: str, default: str = "") -> str:
+    def _env_str(key: str, default: str | None = None) -> str:
         raw = os.environ.get(key)
-        if raw is None or raw == "":
-            raise ValueError(f"Required environment variable not set: {key}")
-        return raw
+        if raw is not None and raw != "":
+            return raw
+        if default is not None:
+            return default
+        raise ValueError(f"Required environment variable not set: {key}")
 
     @staticmethod
     def _env_int(key: str, default: int = 0) -> int:
@@ -132,19 +134,17 @@ class ConfigLoader:
 
         api_side_port = cls._env_int("API_SIDE_PORT", 8080)
         raw_base = cls._env_str("MEDIA_BASE_URL", "http://tg-if")
-        # Check if URL already has a port by looking for ':' in the host part
         host_part = raw_base.split("//")[-1]
         if ":" not in host_part:
-            # No port found, append it
             media_base_url = f"{raw_base}:{api_side_port}"
         else:
-            # Port already present, verify it's a valid port number
             port_part = host_part.split(":")[-1]
             if port_part.isdigit():
                 media_base_url = raw_base
             else:
-                # Invalid port, append the correct one
-                media_base_url = f"{raw_base}:{api_side_port}"
+                scheme = raw_base.split("://")[0]
+                host_no_port = host_part.rsplit(":", 1)[0]
+                media_base_url = f"{scheme}://{host_no_port}:{api_side_port}"
 
         return AppConfig(
             log_level=cls._env_str("LOG_LEVEL", "INFO"),
