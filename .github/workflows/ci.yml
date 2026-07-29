@@ -71,3 +71,25 @@ jobs:
         run: uv run bandit -r src/ -x tests/
       - name: pip-audit dependency vulnerability scan
         run: uv run pip-audit --strict
+
+  badges:
+    needs: [lint-typecheck, test, integration]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv sync --all-extras
+      - run: uv run pytest --cov=src --cov-report=json --cov-report= -q
+      - run: python badges/gen_badges.py --skip-tests
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update coverage badges [skip ci]"
+          file_pattern: "badges/*.json"

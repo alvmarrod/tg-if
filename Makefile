@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint fmt format typecheck test check build run
+.PHONY: install install-dev lint fmt format typecheck test badges check build run
 
 install:
 	uv sync
@@ -18,6 +18,9 @@ typecheck:
 
 test:
 	uv run pytest
+
+badges:
+	python badges/gen_badges.py
 
 check: lint typecheck test
 

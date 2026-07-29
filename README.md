@@ -4,6 +4,8 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/alvmarrod/tg-if/actions/workflows/ci.yml/badge.svg)](https://github.com/alvmarrod/tg-if/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/alvmarrod/tg-if/main/badges/coverage.json)
+![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/alvmarrod/tg-if/main/badges/tests.json)
 
 Telegram MTProto gateway service that receives events via PyroTGFork (Pyrogram-based), routes them through a rules engine, and publishes to RabbitMQ (AMQP) for subscriber consumption. Also consumes responses from `outgoing.responses` and sends them to Telegram.
 
