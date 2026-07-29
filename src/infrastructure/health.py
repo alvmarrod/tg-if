@@ -13,6 +13,7 @@ from infrastructure.media.upload_routes import (
     handle_upload_post,
 )
 from infrastructure.sqlite import UploadRegistry
+from infrastructure.telegram.client import TelegramClient
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -48,7 +49,7 @@ async def handle_health(request: web.Request) -> web.Response:
     return web.json_response(status)
 
 
-def handle_metrics(request: web.Request) -> web.Response:
+async def handle_metrics(request: web.Request) -> web.Response:
     from infrastructure.metrics_exporter import generate_metrics
 
     return web.Response(
@@ -63,7 +64,7 @@ async def create_health_server(
     upload_registry: UploadRegistry | None = None,
     upload_storage: MediaStorage | None = None,
     max_upload_size: int = 2000 * 1024 * 1024,
-    client_map: dict[str, Any] | None = None,
+    client_map: dict[str, TelegramClient] | None = None,
     **kwargs: Any,
 ) -> web.TCPSite:
     app = web.Application()
@@ -79,7 +80,7 @@ async def create_health_server(
     for key, val in kwargs.items():
         app[key] = val
     app.router.add_get("/health", handle_health)
-    app.router.add_get("/metrics", handle_metrics)  # type: ignore[arg-type]
+    app.router.add_get("/metrics", handle_metrics)
     app.router.add_get("/files/{bot_id}/{file_unique_id}", handle_file_get)
     app.router.add_post("/upload/{bot_id}", handle_upload_post)
     runner = web.AppRunner(app)

@@ -207,8 +207,6 @@ class ReceiverService:
                     message="Invalid media config message received via AMQP",
                     body=body,
                 )
-            # Re-raise to ensure serious validation errors aren't silently swallowed
-            raise
 
     async def _on_client_connected(self, name: str) -> None:
         logger.info("client connected", bot=name)
@@ -344,26 +342,37 @@ class ReceiverService:
                 logger.error("command registration failed", exc=exc, exc_info=True)
                 raise
 
+        failed_bots: list[str] = []
         for client in self._clients.values():
             try:
                 await client.start()
             except Exception as exc:
                 logger.error(
-                    "client failed to start", bot=client.bot_id, exc=exc, exc_info=True
+                    "client failed to start, skipping",
+                    bot=client.bot_id,
+                    exc=exc,
+                    exc_info=True,
                 )
-                raise
+                failed_bots.append(client.bot_id)
+        for bot_id in failed_bots:
+            self._clients.pop(bot_id, None)
+        if failed_bots and self._notifier:
+            await self._notifier.notify(
+                AdminSignalType.COMPONENT_DISCONNECTED,
+                component=f"bots/{','.join(failed_bots)}",
+            )
 
         if self._user_client is not None:
             try:
                 await self._user_client.start()
             except Exception as exc:
                 logger.error(
-                    "user client failed to start",
+                    "user client failed to start, disabling",
                     bot=self._user_client.bot_id,
                     exc=exc,
                     exc_info=True,
                 )
-                raise
+                self._user_client = None
 
         self._upload_registry.connect()
 
@@ -386,6 +395,7 @@ class ReceiverService:
             logger.error(
                 "media config consumer failed to start", exc=exc, exc_info=True
             )
+            await self._consumer.stop()
             raise
 
         try:
@@ -401,6 +411,9 @@ class ReceiverService:
             logger.error(
                 "subscriber commands consumer failed to start", exc=exc, exc_info=True
             )
+            if self._media_config_consumer is not None:
+                await self._media_config_consumer.stop()
+            await self._consumer.stop()
             raise
 
         self._health_site = await create_health_server(

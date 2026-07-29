@@ -58,7 +58,7 @@ async def handle_file_get(request: web.Request) -> web.Response:
 
     # Download from Telegram
     try:
-        result = await client._client.download_media(file_id, in_memory=True)
+        result = await client.download_media_in_memory(file_id)
     except Exception as exc:
         logger.warning(
             "media download failed",
@@ -70,18 +70,13 @@ async def handle_file_get(request: web.Request) -> web.Response:
         return web.json_response(
             {"error": f"telegram download failed: {exc}"}, status=502
         )
-
-    if result is None:
-        return web.json_response({"error": "download returned no data"}, status=502)
-
-    raw_data = (
-        result.getvalue() if hasattr(result, "getvalue") else result.read()  # type: ignore[union-attr]
-    )
+    raw_data = result.getvalue()
 
     # Use bin as default; in-memory download lacks type metadata
     ext = "bin"
 
-    if not await storage.store(bot_id, file_unique_id, raw_data, ext):
+    stored_path = await storage.store(bot_id, file_unique_id, raw_data, ext)
+    if not stored_path:
         return web.json_response({"error": "failed to store file"}, status=500)
 
     # Verify storage succeeded by attempting to retrieve

@@ -1,3 +1,4 @@
+import io
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from pyrogram.handlers.disconnect_handler import DisconnectHandler
 from pyrogram.types import BotCommand, InputMediaPhoto, InputMediaVideo, Message
 
 from domain.entities import ChatType, RoutingContext, TelegramEvent
+from domain.schemas import ChatDialog
 from infrastructure.config import BotConfig
 from infrastructure.telegram.handlers import (
     build_reply_markup,
@@ -32,7 +34,8 @@ from infrastructure.telegram.handlers import (
 pyrogram.session.session.Session.PING_INTERVAL = 15  # 5s → 15s
 pyrogram.session.session.Session.WAIT_TIMEOUT = 30  # 15s → 30s
 pyrogram.connection.connection.Connection.MAX_RETRIES = 5  # 3 → 5
-_tcp_cls = pyrogram.connection.transport.tcp.TCP  # type: ignore[attr-defined]
+_tcp: Any = pyrogram.connection.transport.tcp
+_tcp_cls = _tcp.TCP
 _tcp_cls.TIMEOUT = 30  # 10s → 30s (must be >= PING_INTERVAL)
 
 
@@ -71,7 +74,7 @@ class TelegramClient:
         if config.bot_token is not None:
             self._client_kwargs["bot_token"] = config.bot_token
         self._init_client()
-        self._known_chats: dict[int, dict[str, Any]] = {}
+        self._known_chats: dict[int, ChatDialog] = {}
 
     def _init_client(self) -> None:
         self._client = PyrogramClient(**self._client_kwargs)
@@ -93,7 +96,7 @@ class TelegramClient:
         return self._bot_token is None
 
     @property
-    def known_chats(self) -> list[dict[str, Any]]:
+    def known_chats(self) -> list[ChatDialog]:
         """Return lightweight dicts of chats seen by this client."""
         return list(self._known_chats.values())
 
@@ -105,16 +108,16 @@ class TelegramClient:
             last = getattr(chat, "last_name", "") or ""
             title = f"{first} {last}".strip()
         permissions = getattr(chat, "permissions", None)
-        self._known_chats[chat.id] = {
-            "chat_id": chat.id,
-            "title": title,
-            "type": str(chat.type).split(".")[-1].lower() if chat.type else "unknown",
-            "members": getattr(chat, "member_count", 0) or 0,
-            "can_read": True,
-            "can_write": getattr(permissions, "can_send_messages", False)
+        self._known_chats[chat.id] = ChatDialog(
+            chat_id=chat.id,
+            title=title,
+            type=str(chat.type).split(".")[-1].lower() if chat.type else "unknown",
+            members=getattr(chat, "member_count", 0) or 0,
+            can_read=True,
+            can_write=getattr(permissions, "can_send_messages", False)
             if permissions
             else False,
-        }
+        )
 
     async def start(self) -> None:
         try:
@@ -487,7 +490,7 @@ class TelegramClient:
         context = RoutingContext(chat_type=ChatType.PRIVATE)
         await self._event_callback(event, context)
 
-    async def get_dialogs(self) -> list[dict[str, Any]]:
+    async def get_dialogs(self) -> list[ChatDialog]:
         """Return known chats.
 
         This method only works for user (non-bot) accounts in Pyrogram.
@@ -497,13 +500,13 @@ class TelegramClient:
         """
         return self.known_chats
 
-    async def discover_chats(self) -> list[dict[str, Any]]:
+    async def discover_chats(self) -> list[ChatDialog]:
         """Call Pyrogram's real get_dialogs() to discover all accessible chats.
 
         Only works for user (non-bot) accounts via MTProto.
         Bots will get BOT_METHOD_INVALID — callers must guard with is_user.
         """
-        dialogs: list[dict[str, Any]] = []
+        dialogs: list[ChatDialog] = []
         gen = self._client.get_dialogs()
         assert gen is not None
         async for dialog in gen:
@@ -517,18 +520,18 @@ class TelegramClient:
                 last = getattr(chat, "last_name", "") or ""
                 title = f"{first} {last}".strip()
             dialogs.append(
-                {
-                    "chat_id": chat.id,
-                    "title": title,
-                    "type": str(chat.type).split(".")[-1].lower()
+                ChatDialog(
+                    chat_id=chat.id,
+                    title=title,
+                    type=str(chat.type).split(".")[-1].lower()
                     if chat.type
                     else "unknown",
-                    "members": getattr(chat, "member_count", 0) or 0,
-                    "can_read": True,
-                    "can_write": getattr(permissions, "can_send_messages", False)
+                    members=getattr(chat, "member_count", 0) or 0,
+                    can_read=True,
+                    can_write=getattr(permissions, "can_send_messages", False)
                     if permissions
                     else False,
-                }
+                )
             )
         return dialogs
 
@@ -576,3 +579,14 @@ class TelegramClient:
         if result is None:
             raise RuntimeError("download_media returned None")
         return str(result)
+
+    async def download_media_in_memory(self, file_id: str) -> io.BytesIO:
+        """Download media by file_id and return it as BytesIO.
+
+        Raises RuntimeError if the download returns no data.
+        """
+        result = await self._client.download_media(file_id, in_memory=True)
+        if result is None:
+            raise RuntimeError("download_media_in_memory returned None")
+        assert isinstance(result, io.BytesIO)
+        return result

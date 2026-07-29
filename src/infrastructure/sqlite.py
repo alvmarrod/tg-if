@@ -161,18 +161,8 @@ class UploadRegistry:
         )
         conn.commit()
         return cur.rowcount > 0
-        conn = self._ensure_conn()
-        cur = conn.execute(
-            "DELETE FROM uploads WHERE content_hash = ?", (content_hash,)
-        )
-        conn.commit()
-        return cur.rowcount > 0
 
     def purge_all(self) -> int:
-        conn = self._ensure_conn()
-        cur = conn.execute("DELETE FROM uploads")
-        conn.commit()
-        return cur.rowcount
         conn = self._ensure_conn()
         cur = conn.execute("DELETE FROM uploads")
         conn.commit()

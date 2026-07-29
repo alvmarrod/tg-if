@@ -47,6 +47,15 @@ class RabbitMQManager:
                 type=ExchangeType.DIRECT,
                 durable=True,
             )
+            await self._channel.declare_exchange(
+                "tg-if.dlq",
+                type=ExchangeType.DIRECT,
+                durable=True,
+            )
+            await self._channel.declare_queue("dead-letter", durable=True)
+            dlq_exchange = await self._channel.get_exchange("tg-if.dlq")
+            dlq_queue = await self._channel.get_queue("dead-letter")
+            await dlq_queue.bind(dlq_exchange, routing_key="dlq")
             await self._channel.declare_queue("outgoing.responses", durable=True)
             await self._channel.declare_queue("media-config", durable=True)
             await self._channel.declare_queue("subscriber-commands", durable=True)

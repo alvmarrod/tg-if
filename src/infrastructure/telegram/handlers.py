@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Any
 
+from domain.schemas import FromUser, MediaRawInfo, ReplyToMessage
+
 from pyrogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -47,17 +49,14 @@ _MEDIA_EXTENSION: dict[str, str] = {
 
 def _extract_media_info(
     message: Message,
-) -> tuple[str | None, str | None, dict[str, Any]]:
+) -> tuple[str | None, str | None, MediaRawInfo]:
     for attr in _MEDIA_ATTRS:
         media_obj = getattr(message, attr, None)
         if media_obj is None:
             continue
         file_id: str | None = getattr(media_obj, "file_id", None)
         file_unique_id: str | None = getattr(media_obj, "file_unique_id", None)
-        raw: dict[str, Any] = {
-            "file_id": file_id,
-            "file_unique_id": file_unique_id,
-        }
+        raw = MediaRawInfo(file_id=file_id, file_unique_id=file_unique_id)
         for field in (
             "file_size",
             "mime_type",
@@ -73,7 +72,7 @@ def _extract_media_info(
             if val is not None:
                 raw[field] = val
         return file_id, file_unique_id, raw
-    return None, None, {}
+    return None, None, MediaRawInfo()
 
 
 def _detect_command(text: str | None) -> tuple[str | None, list[str]]:
@@ -87,28 +86,28 @@ def _detect_command(text: str | None) -> tuple[str | None, list[str]]:
 
 def _extract_from_user(
     user: Any,
-) -> dict[str, Any] | None:
+) -> FromUser | None:
     if user is None:
         return None
-    return {
-        "id": user.id,
-        "is_bot": user.is_bot,
-        "first_name": user.first_name,
-        "last_name": getattr(user, "last_name", None),
-        "username": getattr(user, "username", None),
-        "language_code": getattr(user, "language_code", None),
-    }
+    return FromUser(
+        id=user.id,
+        is_bot=user.is_bot,
+        first_name=user.first_name,
+        last_name=getattr(user, "last_name", None),
+        username=getattr(user, "username", None),
+        language_code=getattr(user, "language_code", None),
+    )
 
 
-def _extract_reply_to_message(reply: Any) -> dict[str, Any] | None:
+def _extract_reply_to_message(reply: Any) -> ReplyToMessage | None:
     if reply is None:
         return None
-    return {
-        "message_id": reply.id,
-        "from": _extract_from_user(reply.from_user),
-        "text": getattr(reply, "text", None),
-        "caption": getattr(reply, "caption", None),
-    }
+    return ReplyToMessage(
+        message_id=reply.id,
+        from_=_extract_from_user(reply.from_user),
+        text=getattr(reply, "text", None),
+        caption=getattr(reply, "caption", None),
+    )
 
 
 def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEvent:
@@ -138,7 +137,7 @@ def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEve
     media_type = str(message.media.value) if message.media else None
 
     file_id, file_unique_id, media_raw = (
-        _extract_media_info(message) if has_media else (None, None, {})
+        _extract_media_info(message) if has_media else (None, None, MediaRawInfo())
     )
     is_reply = reply_to_message_id is not None
     is_forward = message.forward_origin is not None
@@ -193,7 +192,7 @@ def edited_message_to_event(
     media_type = str(message.media.value) if message.media else None
 
     file_id, file_unique_id, media_raw = (
-        _extract_media_info(message) if has_media else (None, None, {})
+        _extract_media_info(message) if has_media else (None, None, MediaRawInfo())
     )
     is_reply = reply_to_message_id is not None
     is_forward = message.forward_origin is not None

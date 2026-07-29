@@ -3,7 +3,9 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import aio_pika
 import structlog
+from aio_pika import DeliveryMode
 from aio_pika.abc import AbstractChannel, AbstractQueue
 
 from infrastructure.broker.rabbitmq import RabbitMQManager
@@ -94,11 +96,36 @@ class Consumer:
             queue=self._queue_name,
             max_retries=self._max_retries,
         )
-        if self._on_failed:
+        if self._on_failed and last_exc is not None:
             try:
-                await self._on_failed(body, last_exc)  # type: ignore[arg-type]
+                await self._on_failed(body, last_exc)
             except Exception:
                 logger.exception("on_failed callback failed", queue=self._queue_name)
+
+        await self._publish_dead_letter(body, last_exc)
+
+    async def _publish_dead_letter(
+        self, body: dict[str, Any], exc: Exception | None
+    ) -> None:
+        if self._channel is None or self._channel.is_closed:
+            logger.warning("cannot publish dead-letter: channel not available")
+            return
+        try:
+            exchange = await self._channel.get_exchange("tg-if.dlq")
+            dlq_body = {
+                "original": body,
+                "error": str(exc) if exc else "unknown",
+                "queue": self._queue_name,
+            }
+            await exchange.publish(
+                aio_pika.Message(
+                    body=json.dumps(dlq_body).encode(),
+                    delivery_mode=DeliveryMode.PERSISTENT,
+                ),
+                routing_key="dlq",
+            )
+        except Exception:
+            logger.exception("failed to publish dead-letter message")
 
     async def stop(self) -> None:
         if self._task is not None:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 import structlog
 
@@ -14,6 +13,7 @@ from domain.entities import (
     RoutingContext,
     TelegramEvent,
 )
+from domain.schemas import EventEnvelope
 from infrastructure import metrics_exporter as prom
 from domain.rules import RoutingDecision, RoutingRule, RulesEngine, resolve_subtype
 from infrastructure.broker import Publisher
@@ -54,7 +54,17 @@ class EventDispatcher:
                 self._metrics.event_matched(event.bot_id)
             prom.events_matched.labels(bot=event.bot_id).inc()
             envelope = self._build_envelope(event, context, decision.target)
-            await self._publisher.publish(decision.target, envelope)
+            try:
+                await self._publisher.publish(decision.target, envelope)
+            except Exception as exc:
+                logger.error(
+                    "event publish failed",
+                    bot=event.bot_id,
+                    target=decision.target,
+                    error=str(exc),
+                    exc_info=True,
+                )
+                return decision
             if self._metrics:
                 self._metrics.event_published(event.bot_id)
                 self._metrics.target_event(event.bot_id, decision.target)
@@ -96,7 +106,7 @@ class EventDispatcher:
         event: TelegramEvent,
         context: RoutingContext,
         target: str,
-    ) -> dict[str, Any]:
+    ) -> EventEnvelope:
         file_id: str | None = None
         file_unique_id: str | None = None
         if hasattr(event, "file_id"):
@@ -111,7 +121,7 @@ class EventDispatcher:
                 base += f"?file_id={file_id}"
             media_url = base
 
-        envelope: dict[str, Any] = {
+        envelope: EventEnvelope = {
             "event_id": str(uuid.uuid4()),
             "timestamp": datetime.now(timezone.utc).timestamp(),
             "bot_id": event.bot_id,

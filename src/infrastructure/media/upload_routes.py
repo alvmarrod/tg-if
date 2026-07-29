@@ -3,21 +3,21 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
-from typing import Any
 
 import structlog
 from aiohttp import web
 from aiohttp.multipart import BodyPartReader
-from aiohttp.web_app import AppKey  # type: ignore[attr-defined]
+from aiohttp.web import AppKey
 
 from domain.schemas import UploadEntry
 from infrastructure.media.storage import MediaStorage
 from infrastructure.sqlite import UploadRegistry
+from infrastructure.telegram.client import TelegramClient
 
 
 UploadRegistryKey: AppKey[UploadRegistry | None] = AppKey("upload_registry")
 MediaStorageKey: AppKey[MediaStorage | None] = AppKey("upload_storage")
-ClientMapKey: AppKey[dict[str, Any]] = AppKey("client_map")
+ClientMapKey: AppKey[dict[str, TelegramClient]] = AppKey("client_map")
 MaxUploadSizeKey: AppKey[int] = AppKey("max_upload_size")
 
 logger = structlog.get_logger()

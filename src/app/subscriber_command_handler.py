@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import json
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 from aio_pika import Message
@@ -87,7 +89,7 @@ class SubscriberCommandHandler:
 
     async def _reply(
         self,
-        reply_to: Optional[str],
+        reply_to: str | None,
         response: SubscriberCommandResponse,
     ) -> None:
         """Reply to a subscriber command with the given response."""

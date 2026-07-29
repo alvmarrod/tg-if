@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from typing import Any
 
 import aio_pika
@@ -17,7 +18,7 @@ class Publisher:
         self._manager = manager
 
     async def publish(
-        self, routing_key: str, message: dict[str, Any] | BaseModel
+        self, routing_key: str, message: Mapping[str, Any] | BaseModel
     ) -> bool:
         """Publish a message to the specified routing key.
 
@@ -42,7 +43,7 @@ class Publisher:
 
         if isinstance(message, BaseModel):
             body = message.model_dump_json().encode()
-        elif isinstance(message, dict):
+        elif isinstance(message, Mapping):
             body = json.dumps(message).encode()
         else:
             raise PublisherError(
@@ -53,7 +54,7 @@ class Publisher:
         try:
             async with await conn.channel() as channel:
                 exchange = await channel.declare_exchange(
-                    "tg-if.events", aio_pika.ExchangeType.FANOUT, durable=True
+                    "tg-if.events", aio_pika.ExchangeType.TOPIC, durable=True
                 )
 
                 msg: aio_pika.Message = aio_pika.Message(

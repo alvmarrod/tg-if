@@ -2,6 +2,62 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-29
+
+### Changed
+
+- Code quality sweep across 33 files: type hint refinements, pre-commit hook
+  alignment, mypy strict-mode compliance fixes, linting and formatting
+  consistency improvements, and test corrections to match updated signatures.
+  No behavioural changes.
+
+### Fixed
+
+- `ReceiverService.start()` no longer crashes on a single bot failure: failed
+  bots are removed from `self._clients` and the rest continue; the admin
+  notifier is alerted. User client failure also degrades gracefully by
+  setting `self._user_client = None` instead of crashing.
+- `ReceiverService.start()` now cleans up previously started consumers when a
+  later consumer fails to start, preventing orphaned consumers from running.
+- `_on_media_config_message` no longer re-raises on validation failure: invalid
+  messages are logged, admin-notified, and dropped — instead of triggering the
+  consumer's retry loop for a permanently invalid message.
+- Added dead-letter queue (`tg-if.dlq` exchange, `dead-letter` queue): messages
+  that exceed max retries in `Consumer` are published with error metadata and
+  source queue name for manual inspection, instead of being silently dropped
+- `EventDispatcher.dispatch` now catches publish failures instead of letting
+  the exception propagate uncaught through the Telegram event handler
+- Added typed domain schemas: `FromUser`, `ReplyToMessage`, `ChatDialog`,
+  `EventEnvelope`, and `MediaRawInfo` TypedDicts in `domain/schemas.py`,
+  reducing `dict[str, Any]` usage from 59 to 37 sites across `src/`. Updated
+  `handlers.py` constructors, `dispatcher.py` envelope builder, `client.py`
+  chat registries, and `health.py` client map to use concrete types.
+- Migrated all `Optional[X]` to `X | None` syntax in `domain/entities.py` (19
+  fields) and `app/subscriber_command_handler.py` (1 parameter), with
+  `from __future__ import annotations` added for PEP 604 compatibility
+- Added `TelegramClient.download_media_in_memory()` public method so callers
+  no longer access `client._client` private attribute directly (fixes
+  `endpoint.py` private-attribute access, resolves CQ-09)
+- Eliminated all 5 `# type: ignore` comments in `src/`: made `handle_metrics`
+  async (health.py), switched `hasattr` to `isinstance` for type narrowing
+  (endpoint.py), fixed `AppKey` import path (upload_routes.py), used `Any`
+  typed alias for PyroTGFork internal module access (client.py), added
+  `last_exc is not None` guard (consumer.py). Source tree now mypy-clean with
+  zero suppressions.
+- `UploadRegistry.delete()` and `purge_all()` in `sqlite.py` had unreachable
+  duplicate blocks after `return` statements (dead code)
+- `endpoint.py` checked `if not await storage.store(...)` against a `str` return
+  value — non-empty path strings are always truthy, so the failure branch was
+  never taken
+- `Publisher.publish()` declared exchange `tg-if.events` as `FANOUT` instead of
+  `TOPIC`, breaking topic-based routing — all published messages went to every
+  bound queue regardless of routing key
+- `main.py` shutdown: `asyncio.create_task(service.stop())` was scheduled
+  immediately after `service.start()`, causing the service to stop right away
+  regardless of signals. Signal handlers that set `stop_event` were dead code.
+  Now `service.stop()` is only called after `stop_event.wait()` returns,
+  so `SIGINT`/`SIGTERM` properly drive graceful shutdown.
+
 ## [0.11.0] - 2026-07-21
 
 ### Added
