@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from typing import Any
 
 import structlog
 from aiohttp import web
@@ -18,6 +19,9 @@ UploadRegistryKey: AppKey[UploadRegistry | None] = AppKey("upload_registry")
 MediaStorageKey: AppKey[MediaStorage | None] = AppKey("upload_storage")
 ClientMapKey: AppKey[dict[str, TelegramClient]] = AppKey("client_map")
 MaxUploadSizeKey: AppKey[int] = AppKey("max_upload_size")
+BrokerKey: AppKey[Any] = AppKey("broker")
+ClientsKey: AppKey[Any] = AppKey("clients")
+StorageKey: AppKey[MediaStorage | None] = AppKey("storage")
 
 logger = structlog.get_logger()
 

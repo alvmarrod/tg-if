@@ -2,6 +2,7 @@ import structlog
 from aiohttp import web
 
 from infrastructure.media.storage import MediaStorage, mime_for_ext
+from infrastructure.media.upload_routes import ClientMapKey, StorageKey
 from infrastructure.telegram.client import TelegramClient
 
 
@@ -20,8 +21,8 @@ async def handle_file_get(request: web.Request) -> web.Response:
     if file_unique_id is None:
         return web.json_response({"error": "missing file_unique_id"}, status=400)
 
-    client_map: dict[str, TelegramClient] | None = request.app.get("client_map")
-    storage: MediaStorage | None = request.app.get("storage")
+    client_map: dict[str, TelegramClient] | None = request.app.get(ClientMapKey)
+    storage: MediaStorage | None = request.app.get(StorageKey)
 
     if storage is None:
         return web.json_response({"error": "storage not available"}, status=503)

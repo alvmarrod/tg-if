@@ -8,6 +8,7 @@ import pytest
 from aiohttp import web
 
 from infrastructure.health import create_health_server, handle_health, handle_metrics
+from infrastructure.media.upload_routes import BrokerKey, ClientsKey
 
 
 def _body(resp: web.Response) -> Any:
@@ -37,7 +38,7 @@ class TestHandleHealth:
     ) -> None:
         broker = AsyncMock()
         broker.health = AsyncMock(return_value=True)
-        app["broker"] = broker
+        app[BrokerKey] = broker
         resp = await handle_health(mock_request)
         assert _body(resp)["broker"] == "connected"
 
@@ -46,7 +47,7 @@ class TestHandleHealth:
     ) -> None:
         broker = AsyncMock()
         broker.health = AsyncMock(return_value=False)
-        app["broker"] = broker
+        app[BrokerKey] = broker
         resp = await handle_health(mock_request)
         assert _body(resp)["broker"] == "disconnected"
 
@@ -57,7 +58,7 @@ class TestHandleHealth:
         client_b = MagicMock()
         client_b.health = AsyncMock(return_value=False)
         client_b.bot_id = "botb"
-        app["clients"] = {"bota": client_a, "botb": client_b}
+        app[ClientsKey] = {"bota": client_a, "botb": client_b}
         body = _body(await handle_health(mock_request))
         assert body["clients"]["bota"] == "connected"
         assert body["clients"]["botb"] == "disconnected"
@@ -71,7 +72,7 @@ class TestHandleHealth:
         client_b = MagicMock()
         client_b.health = AsyncMock(return_value=False)
         client_b.bot_id = "botb"
-        app["clients"] = [client_a, client_b]
+        app[ClientsKey] = [client_a, client_b]
         body = _body(await handle_health(mock_request))
         assert body["clients"]["bota"] == "connected"
         assert body["clients"]["botb"] == "disconnected"
@@ -79,7 +80,7 @@ class TestHandleHealth:
     async def test_clients_invalid_type_raises(
         self, app: web.Application, mock_request: Mock
     ) -> None:
-        app["clients"] = "not_a_dict_or_iterable"
+        app[ClientsKey] = "not_a_dict_or_iterable"
         with pytest.raises(TypeError, match="Expected dict or iterable"):
             await handle_health(mock_request)
 
@@ -87,7 +88,7 @@ class TestHandleHealth:
         self, app: web.Application, mock_request: Mock
     ) -> None:
         bad_client = MagicMock(spec=[])  # no health method
-        app["clients"] = {"bad": bad_client}
+        app[ClientsKey] = {"bad": bad_client}
         with pytest.raises(
             TypeError, match="Expected client object with health method"
         ):
@@ -98,7 +99,7 @@ class TestHandleHealth:
     ) -> None:
         bad_client = MagicMock(spec=["health"])  # has health but no bot_id
         bad_client.health = AsyncMock(return_value=True)
-        app["clients"] = [bad_client]
+        app[ClientsKey] = [bad_client]
         with pytest.raises(
             TypeError, match="Expected client object with bot_id attribute"
         ):

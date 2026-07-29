@@ -2,13 +2,17 @@ from collections.abc import Iterable
 from typing import Any
 
 from aiohttp import web
+from aiohttp.web import AppKey
 
 from infrastructure.media.endpoint import handle_file_get
 from infrastructure.media.storage import MediaStorage
 from infrastructure.media.upload_routes import (
+    BrokerKey,
     ClientMapKey,
+    ClientsKey,
     MaxUploadSizeKey,
     MediaStorageKey,
+    StorageKey,
     UploadRegistryKey,
     handle_upload_post,
 )
@@ -18,11 +22,11 @@ from infrastructure.telegram.client import TelegramClient
 
 async def handle_health(request: web.Request) -> web.Response:
     status: dict[str, Any] = {"status": "healthy"}
-    broker = request.app.get("broker")
+    broker = request.app.get(BrokerKey)
     if broker is not None:
         broker_ok = await broker.health()
         status["broker"] = "connected" if broker_ok else "disconnected"
-    clients = request.app.get("clients")
+    clients = request.app.get(ClientsKey)
     if clients is not None:
         client_status: dict[str, str] = {}
         if isinstance(clients, dict):
@@ -69,7 +73,7 @@ async def create_health_server(
 ) -> web.TCPSite:
     app = web.Application()
     if storage is not None:
-        app["storage"] = storage
+        app[StorageKey] = storage
     if upload_registry is not None:
         app[UploadRegistryKey] = upload_registry
     if upload_storage is not None:
@@ -78,7 +82,7 @@ async def create_health_server(
     if client_map is not None:
         app[ClientMapKey] = client_map
     for key, val in kwargs.items():
-        app[key] = val
+        app[AppKey(key)] = val
     app.router.add_get("/health", handle_health)
     app.router.add_get("/metrics", handle_metrics)
     app.router.add_get("/files/{bot_id}/{file_unique_id}", handle_file_get)
