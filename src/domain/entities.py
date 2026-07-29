@@ -341,7 +341,7 @@ class ExportCheckpoint(BaseModel):
     progress_chat_id: int | None = None
     since_msg_id: int | None = None
     since_date: str | None = None
-    bot_name: str = ""
+    bot_name: Optional[str] = None
     saved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

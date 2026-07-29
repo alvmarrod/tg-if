@@ -73,19 +73,34 @@ def _detect_ext(filename: str | None, content_type: str | None) -> str:
         if ext:
             return ext.lstrip(".").lower()
     if content_type:
-        return _CT_TO_EXT.get(content_type, "bin")
-    return "bin"
+        if content_type not in _CT_TO_EXT:
+            raise ValueError(
+                f"Unknown content type: {content_type}. "
+                f"Supported types: {list(_CT_TO_EXT.keys())}"
+            )
+        return _CT_TO_EXT[content_type]
+    raise ValueError("Could not determine file extension from filename or content-type")
 
 
 async def handle_upload_post(request: web.Request) -> web.Response:
-    bot_id = request.match_info.get("bot_id", "")
-    if not bot_id:
+    bot_id = request.match_info.get("bot_id")
+    if bot_id is None:
         return web.json_response({"error": "missing bot_id"}, status=400)
 
     registry: UploadRegistry | None = request.app.get(UploadRegistryKey)
     storage: MediaStorage | None = request.app.get(MediaStorageKey)
-    client_map: dict[str, Any] = request.app.get(ClientMapKey, {})
-    max_size: int = request.app.get(MaxUploadSizeKey, 2000 * 1024 * 1024)
+    client_map = request.app.get(ClientMapKey)
+    if client_map is None:
+        return web.json_response(
+            {"error": "client map not configured"},
+            status=500,
+        )
+    max_size: int | None = request.app.get(MaxUploadSizeKey)
+    if max_size is None:
+        return web.json_response(
+            {"error": "max_upload_size not configured"},
+            status=500,
+        )
 
     if registry is None or storage is None:
         return web.json_response({"error": "upload service not available"}, status=503)
@@ -97,16 +112,44 @@ async def handle_upload_post(request: web.Request) -> web.Response:
     if error is not None:
         return error
 
-    reader = await request.multipart()
-    part = await reader.next()
-    if not isinstance(part, BodyPartReader):
-        return web.json_response({"error": "missing file field"}, status=400)
-    if part.name != "file":
-        return web.json_response(
-            {"error": "unexpected field, expected 'file'"}, status=400
-        )
+    try:
+        reader = await request.multipart()
+        part = await reader.next()
+        if part is None:
+            logger.warning(
+                "upload multipart part is None",
+                bot=bot_id,
+            )
+            return web.json_response(
+                {"error": "unexpected multipart part: None"},
+                status=400,
+            )
+        if not isinstance(part, BodyPartReader):
+            logger.warning(
+                "upload multipart part is not BodyPartReader",
+                bot=bot_id,
+                type=type(part).__name__,
+            )
+            return web.json_response(
+                {"error": "unexpected multipart part type"},
+                status=400,
+            )
+        if part.name != "file":
+            return web.json_response(
+                {"error": "unexpected field, expected 'file'"}, status=400
+            )
 
-    data = await part.read()
+        data = await part.read()
+    except Exception as e:
+        logger.error(
+            "upload multipart parsing failed",
+            bot=bot_id,
+            error=str(e),
+        )
+        return web.json_response(
+            {"error": "failed to parse multipart form", "details": str(e)},
+            status=400,
+        )
 
     if len(data) > max_size:
         logger.warning(
@@ -127,12 +170,37 @@ async def handle_upload_post(request: web.Request) -> web.Response:
     if len(data) == 0:
         return web.json_response({"error": "empty file"}, status=400)
 
-    ext = _detect_ext(part.filename, part.headers.get("Content-Type"))
+    try:
+        ext = _detect_ext(part.filename, part.headers.get("Content-Type"))
+    except ValueError as e:
+        logger.warning(
+            "upload rejected: invalid file type",
+            bot=bot_id,
+            error=str(e),
+        )
+        return web.json_response(
+            {"error": "unsupported file type", "details": str(e)},
+            status=415,
+        )
+
     content_hash = hashlib.sha256(data).hexdigest()
     upload_id = f"upl_{content_hash}"
 
-    entry = await asyncio.to_thread(registry.get_by_hash, content_hash)
-    if entry is not None:
+    try:
+        entry = await asyncio.to_thread(registry.get_by_hash, content_hash)
+    except Exception as e:
+        logger.error(
+            "upload registry lookup failed",
+            bot=bot_id,
+            content_hash=content_hash,
+            error=str(e),
+        )
+        return web.json_response(
+            {"error": "failed to check upload cache", "details": str(e)},
+            status=500,
+        )
+
+    if entry:
         logger.info(
             "upload cache hit",
             bot=bot_id,
@@ -150,7 +218,20 @@ async def handle_upload_post(request: web.Request) -> web.Response:
             }
         )
 
-    path = await storage.store(bot_id, content_hash, data, ext)
+    try:
+        path = await storage.store(bot_id, content_hash, data, ext)
+    except Exception as e:
+        logger.error(
+            "upload storage failed",
+            bot=bot_id,
+            content_hash=content_hash,
+            error=str(e),
+        )
+        return web.json_response(
+            {"error": "failed to store file", "details": str(e)},
+            status=500,
+        )
+
     upload_entry = UploadEntry(
         content_hash=content_hash,
         bot_id=bot_id,

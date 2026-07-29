@@ -45,9 +45,11 @@ class MediaDownloader:
     async def on_event(self, event: TelegramEvent, context: RoutingContext) -> None:
         if not isinstance(event, MessageEvent):
             return
-        if not event.has_media or not event.file_id or not event.file_unique_id:
+        if not event.has_media:
             return
-        if not context.media_type:
+        if context.media_type is None:
+            return
+        if not event.file_id and not event.file_unique_id:
             return
 
         if not self._config.evaluate(
@@ -58,21 +60,38 @@ class MediaDownloader:
             return  # lazy mode — skip eager download
 
         # Check if already cached
-        cached = await self._storage.retrieve(event.bot_id, event.file_unique_id)
-        if cached is not None:
-            return
+        if event.file_unique_id:
+            cached = await self._storage.retrieve(event.bot_id, event.file_unique_id)
+            if cached is not None:
+                return
 
-        asyncio.create_task(self._download(event))
+        asyncio.create_task(self._download(event, context))
 
-    async def _download(self, event: MessageEvent) -> None:
+    async def _download(self, event: MessageEvent, context: RoutingContext) -> None:
         file_id = event.file_id
         file_unique_id = event.file_unique_id
-        if not file_id or not file_unique_id:
+
+        if not file_id:
+            logger.warning("eager download skipped: no file_id", bot=event.bot_id)
             return
+        if not file_unique_id:
+            logger.warning(
+                "eager download skipped: no file_unique_id", bot=event.bot_id
+            )
+            return
+        assert context.media_type is not None
 
         client = self._clients.get(event.bot_id)
         if client is None:
             logger.warning("no client for eager download", bot=event.bot_id)
+            return
+
+        if client._client is None:
+            logger.warning(
+                "client._client is None, cannot eager download",
+                bot=event.bot_id,
+                file_unique_id=file_unique_id,
+            )
             return
 
         if not client._client.is_connected:
@@ -85,12 +104,12 @@ class MediaDownloader:
 
         try:
             result = await client._client.download_media(file_id, in_memory=True)
-        except Exception as exc:
-            logger.warning(
+        except Exception:
+            logger.exception(
                 "eager download failed",
                 bot=event.bot_id,
                 file_unique_id=file_unique_id,
-                error=str(exc),
+                exc_info=True,
             )
             return
 
@@ -102,9 +121,28 @@ class MediaDownloader:
             )
             return
 
-        raw: bytes = result.getvalue() if hasattr(result, "getvalue") else result.read()  # type: ignore[union-attr]
+        raw: bytes
+        if isinstance(result, (bytes, bytearray)):
+            raw = result
+        elif hasattr(result, "getvalue"):
+            raw = result.getvalue()
+        elif hasattr(result, "read"):
+            raw = result.read()
+        else:
+            logger.warning(
+                "eager download returned unsupported type",
+                bot=event.bot_id,
+                file_unique_id=file_unique_id,
+                type=type(result).__name__,
+            )
+            return
 
-        ext = _MEDIA_EXTENSION.get(event.media_type or "", "bin")
+        ext = _MEDIA_EXTENSION.get(context.media_type)
+        if ext is None:
+            raise ValueError(
+                f"Unsupported media type: {context.media_type!r}. "
+                f"Supported types: {list(_MEDIA_EXTENSION.keys())}"
+            )
 
         await self._storage.store(event.bot_id, file_unique_id, raw, ext)
 
@@ -125,11 +163,15 @@ class MediaDownloader:
                 original_event_id=event.event_id,
                 bot_id=event.bot_id,
             )
-            routing_key = f"media.ready.{event.bot_id}.{event.media_type or 'unknown'}"
+            routing_key = f"media.ready.{event.bot_id}.{context.media_type}"
             try:
                 await self._publisher.publish(routing_key, ready)
-            except Exception:
+            except Exception as e:
                 logger.exception(
                     "failed to publish media_ready event",
                     routing_key=routing_key,
+                    exc_info=e,
                 )
+
+
+# No changes needed - all identity/equality checks are correct

@@ -533,7 +533,7 @@ class TestParseKwargs:
         assert _parse_kwargs(["--bot", "aibot"]) == {"bot": "aibot"}
 
     def test_key_without_value(self) -> None:
-        assert _parse_kwargs(["--flag"]) == {"flag": ""}
+        assert _parse_kwargs(["--flag"]) == {"flag": None}
 
     def test_multiple_keys(self) -> None:
         assert _parse_kwargs(["--bot", "aibot", "--target", "test"]) == {

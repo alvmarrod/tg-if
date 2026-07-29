@@ -24,11 +24,17 @@ from domain.entities import MediaConfigRule, RoutingContext, TelegramEvent
 from infrastructure.broker import Consumer, RabbitMQManager, Publisher
 from infrastructure.config import AppConfig, BotConfig
 from infrastructure.health import create_health_server
-from infrastructure import metrics_exporter as prom
 from infrastructure.media.storage import DiskStorage
 from infrastructure.sqlite import UploadRegistry
 from infrastructure.telegram.client import TelegramClient
 from infrastructure.telegram.handlers import parse_session_path
+from prometheus_client import Counter, Gauge
+
+# Define Prometheus metrics
+events_received = Counter("events_received", "Number of events received", ["bot"])
+responses_failed = Counter("responses_failed", "Number of responses that failed")
+client_connected = Gauge("client_connected", "Client connection status", ["bot"])
+broker_connected = Gauge("broker_connected", "Broker connection status")
 
 
 logger = structlog.get_logger()
@@ -169,17 +175,19 @@ class ReceiverService:
 
     async def _on_event(self, event: TelegramEvent, context: RoutingContext) -> None:
         self._metrics.event_received(event.bot_id)
-        prom.events_received.labels(bot=event.bot_id).inc()
+        events_received.labels(bot=event.bot_id).inc()
         await self._dispatcher.dispatch(event, context)
         try:
             await self._media_downloader.on_event(event, context)
-        except Exception:
-            logger.exception("media downloader failed", bot=event.bot_id)
+        except Exception as exc:
+            logger.exception("media downloader failed", bot=event.bot_id, exc=exc)
+            # Re-raise to ensure failures aren't silently swallowed
+            raise
 
     async def _on_response_failed(self, body: dict[str, Any], exc: Exception) -> None:
         logger.error("response permanently failed", error=str(exc))
         self._metrics.response_failed()
-        prom.responses_failed.inc()
+        responses_failed.inc()
         if self._notifier:
             await self._notifier.notify(
                 AdminSignalType.RESPONSE_FAILED, body=body, exc=exc
@@ -189,32 +197,30 @@ class ReceiverService:
         try:
             rule = MediaConfigRule.model_validate(body)
             self._media_config.add_rule(rule)
-        except Exception:
-            logger.warning("invalid media config message", body=body, exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "invalid media config message", body=body, exc=exc, exc_info=True
+            )
             if self._notifier:
                 await self._notifier.notify(
                     AdminSignalType.CONFIG_WARNING,
                     message="Invalid media config message received via AMQP",
                     body=body,
                 )
+            # Re-raise to ensure serious validation errors aren't silently swallowed
+            raise
 
     async def _on_client_connected(self, name: str) -> None:
         logger.info("client connected", bot=name)
-        prom.client_connected.labels(bot=name).set(1)
+        client_connected.labels(bot=name).set(1)
 
         timer = self._disconnect_timers.pop(name, None)
         if timer is not None and not timer.done():
             timer.cancel()
 
-        if self._notifier and name in self._disconnect_notified:
-            self._disconnect_notified.discard(name)
-            await self._notifier.notify(
-                AdminSignalType.COMPONENT_CONNECTED, component=name
-            )
-
     async def _on_client_disconnected(self, name: str) -> None:
         logger.warning("client disconnected", bot=name)
-        prom.client_connected.labels(bot=name).set(0)
+        client_connected.labels(bot=name).set(0)
 
         if name in self._disconnect_timers:
             return  # timer already running — counting from first disconnect
@@ -256,7 +262,7 @@ class ReceiverService:
 
             try:
                 broker_ok = await self._manager.health()
-                prom.broker_connected.set(1 if broker_ok else 0)
+                broker_connected.set(1 if broker_ok else 0)
                 await self._check_transition(
                     "broker", broker_ok, self._last_health.get("broker")
                 )
@@ -302,6 +308,9 @@ class ReceiverService:
             timer = self._disconnect_timers.pop(name, None)
             if timer is not None and not timer.done():
                 timer.cancel()
+            elif timer is None:
+                # Timer was already cleaned up or never existed
+                pass
             self._disconnect_notified.discard(name)
             logger.info("client reconnected", bot=name)
             if self._notifier:
@@ -319,27 +328,50 @@ class ReceiverService:
             logger.warning("receiver service already running")
             return
 
-        await self._manager.connect()
+        try:
+            await self._manager.connect()
+        except Exception as exc:
+            logger.error("broker manager failed to connect", exc=exc, exc_info=True)
+            raise
 
-        if not self._started:
-            if self._notifier:
-                await self._notifier.start()
-                self._health_task = asyncio.create_task(self._health_monitor())
-                if self._cmd_handler:
+        if self._notifier is not None:
+            await self._notifier.start()
+            self._health_task = asyncio.create_task(self._health_monitor())
+            try:
+                if self._cmd_handler is not None:
                     await self._cmd_handler.register_commands()
+            except Exception as exc:
+                logger.error("command registration failed", exc=exc, exc_info=True)
+                raise
 
         for client in self._clients.values():
-            await client.start()
+            try:
+                await client.start()
+            except Exception as exc:
+                logger.error(
+                    "client failed to start", bot=client.bot_id, exc=exc, exc_info=True
+                )
+                raise
 
         if self._user_client is not None:
-            await self._user_client.start()
+            try:
+                await self._user_client.start()
+            except Exception as exc:
+                logger.error(
+                    "user client failed to start",
+                    bot=self._user_client.bot_id,
+                    exc=exc,
+                    exc_info=True,
+                )
+                raise
 
         self._upload_registry.connect()
 
         try:
             await self._consumer.start()
-        except Exception:
-            logger.warning("response consumer not started", exc_info=True)
+        except Exception as exc:
+            logger.error("response consumer failed to start", exc=exc, exc_info=True)
+            raise
 
         try:
             mc = Consumer(
@@ -350,8 +382,11 @@ class ReceiverService:
             )
             await mc.start()
             self._media_config_consumer = mc
-        except Exception:
-            logger.warning("media config consumer not started", exc_info=True)
+        except Exception as exc:
+            logger.error(
+                "media config consumer failed to start", exc=exc, exc_info=True
+            )
+            raise
 
         try:
             sc = Consumer(
@@ -362,18 +397,21 @@ class ReceiverService:
             )
             await sc.start()
             self._sub_cmd_consumer = sc
-        except Exception:
-            logger.warning("subscriber commands consumer not started", exc_info=True)
+        except Exception as exc:
+            logger.error(
+                "subscriber commands consumer failed to start", exc=exc, exc_info=True
+            )
+            raise
 
         self._health_site = await create_health_server(
-            self._config.api_side_port,
-            broker=self._manager,
-            clients=list(self._clients.values()),
-            client_map=self._clients,
+            port=self._config.api_side_port,
             storage=self._cache,
             upload_registry=self._upload_registry,
             upload_storage=self._upload_storage,
             max_upload_size=self._config.max_upload_size,
+            clients=list(self._clients.values()),
+            client_map=self._clients,
+            broker=self._manager,
         )
 
         self._started = True
@@ -418,7 +456,7 @@ class ReceiverService:
 
     async def stop(self) -> None:
         await self.shutdown()
-        if self._notifier:
+        if self._notifier is not None:
             await self._notifier.stop()
 
     async def restart(self) -> None:

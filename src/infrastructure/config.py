@@ -52,7 +52,7 @@ class AppConfig(BaseModel):
     log_level: str = Field(default="INFO")
     api_side_port: int = Field(default=8080)
     media_base_url: str = Field(
-        default="http://tg-if:8080",
+        default="http://tg-if",
         description="Base URL for the /files/ media retrieval endpoint (port auto-appended from api_side_port)",
     )
     media_cache_path: str = Field(
@@ -87,13 +87,18 @@ class AppConfig(BaseModel):
 
 class ConfigLoader:
     @staticmethod
-    def _env_str(key: str, default: str) -> str:
-        return os.environ.get(key, default)
+    def _env_str(key: str, default: str = "") -> str:
+        raw = os.environ.get(key)
+        if raw is None or raw == "":
+            raise ValueError(f"Required environment variable not set: {key}")
+        return raw
 
     @staticmethod
-    def _env_int(key: str, default: int) -> int:
+    def _env_int(key: str, default: int = 0) -> int:
         raw = os.environ.get(key)
         if raw is None:
+            return default
+        if raw == "":
             return default
         return int(raw)
 
@@ -116,10 +121,10 @@ class ConfigLoader:
             for entry in raw.get("bots", []):
                 bots.append(BotConfig.model_validate(entry))
             admin_data = raw.get("admin")
-            if admin_data:
+            if admin_data is not None:
                 admin_config = AdminBotConfig.model_validate(admin_data)
             user_data = raw.get("user")
-            if user_data:
+            if user_data is not None:
                 user_config = UserAccountConfig.model_validate(user_data)
         else:
             msg = f"Bot configuration file not found: {bots_file}"
@@ -127,7 +132,19 @@ class ConfigLoader:
 
         api_side_port = cls._env_int("API_SIDE_PORT", 8080)
         raw_base = cls._env_str("MEDIA_BASE_URL", "http://tg-if")
-        media_base_url = f"{raw_base}:{api_side_port}"
+        # Check if URL already has a port by looking for ':' in the host part
+        host_part = raw_base.split("//")[-1]
+        if ":" not in host_part:
+            # No port found, append it
+            media_base_url = f"{raw_base}:{api_side_port}"
+        else:
+            # Port already present, verify it's a valid port number
+            port_part = host_part.split(":")[-1]
+            if port_part.isdigit():
+                media_base_url = raw_base
+            else:
+                # Invalid port, append the correct one
+                media_base_url = f"{raw_base}:{api_side_port}"
 
         return AppConfig(
             log_level=cls._env_str("LOG_LEVEL", "INFO"),

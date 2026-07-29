@@ -32,12 +32,22 @@ class UploadRegistry:
         self._conn: sqlite3.Connection | None = None
 
     def connect(self) -> None:
+        """Connect to the database and initialize schema."""
+        if self._conn is not None:
+            return
+        self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.executescript(self._SCHEMA)
+        self._conn.commit()
+        if self._conn is not None:
+            return
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(self._SCHEMA)
         self._conn.commit()
 
     def close(self) -> None:
+        """Close the database connection."""
         if self._conn:
             self._conn.close()
             self._conn = None
@@ -48,7 +58,10 @@ class UploadRegistry:
         assert self._conn is not None
         return self._conn
 
-    def _row_to_entry(self, row: sqlite3.Row) -> UploadEntry:
+    def _row_to_entry(self, row: sqlite3.Row | None) -> UploadEntry | None:
+        """Convert a database row to an UploadEntry."""
+        if row is None:
+            return None
         return UploadEntry(
             content_hash=row["content_hash"],
             url_hash=row["url_hash"],
@@ -135,7 +148,11 @@ class UploadRegistry:
             )
         else:
             cur = conn.execute("SELECT * FROM uploads ORDER BY last_used_at DESC")
-        return [self._row_to_entry(r) for r in cur.fetchall()]
+        return [
+            entry
+            for r in cur.fetchall()
+            if (entry := self._row_to_entry(r)) is not None
+        ]
 
     def delete(self, content_hash: str) -> bool:
         conn = self._ensure_conn()
@@ -144,8 +161,18 @@ class UploadRegistry:
         )
         conn.commit()
         return cur.rowcount > 0
+        conn = self._ensure_conn()
+        cur = conn.execute(
+            "DELETE FROM uploads WHERE content_hash = ?", (content_hash,)
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
     def purge_all(self) -> int:
+        conn = self._ensure_conn()
+        cur = conn.execute("DELETE FROM uploads")
+        conn.commit()
+        return cur.rowcount
         conn = self._ensure_conn()
         cur = conn.execute("DELETE FROM uploads")
         conn.commit()

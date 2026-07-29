@@ -145,11 +145,11 @@ class TestTelegramClientExport:
         result = await telegram_client.discover_chats()
         assert result == []
 
-    async def test_download_media_returns_none_on_failure(
+    async def test_download_media_raises_on_failure(
         self, telegram_client: TelegramClient, raw_client: MagicMock
     ) -> None:
         raw_client.download_media.return_value = None
-        result = await telegram_client.download_media(
-            message=MagicMock(), file_path="/path/file.jpg"
-        )
-        assert result is None
+        with pytest.raises(RuntimeError, match="download_media returned None"):
+            await telegram_client.download_media(
+                message=MagicMock(), file_path="/path/file.jpg"
+            )

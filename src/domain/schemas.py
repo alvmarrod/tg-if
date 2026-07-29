@@ -19,11 +19,11 @@ class FileInfo:
 @dataclass
 class UploadEntry:
     content_hash: str
+    bot_id: str
     url_hash: str | None = None
     url: str | None = None
     file_id: str | None = None
     file_unique_id: str | None = None
-    bot_id: str = ""
     ext: str = "bin"
     size: int = 0
     created_at: float = 0.0

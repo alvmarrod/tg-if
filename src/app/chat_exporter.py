@@ -326,7 +326,7 @@ class ChatExportEngine:
                 since_date = (
                     datetime.fromisoformat(cp.since_date) if cp.since_date else None
                 )
-                bot_name = cp.bot_name
+                bot_name = cp.bot_name or ""
                 self._export_offset_id = cp.offset_id
                 self._export_since_msg_id = cp.since_msg_id
                 self._export_since_date = since_date
@@ -504,6 +504,7 @@ class ChatExportEngine:
         self._progress.processed = processed
         self._progress.media_count = media_count
         self._progress.media_bytes = media_bytes
+        self._progress.total = processed
 
         text = f"📦 {processed} messages"
         if media_count:
@@ -571,9 +572,9 @@ class ChatExportEngine:
                         self._seen_file_ids.add(fid)
                         fpath = str(subdir_path / f"{fid}{ext}")
 
-                        async def _download(
-                            _msg: Any = msg,
-                            _path: str = fpath,
+                        async def _download_media(
+                            _msg: Any,
+                            _path: str,
                         ) -> tuple[int, int] | None:
                             async with semaphore:
                                 try:
@@ -590,7 +591,7 @@ class ChatExportEngine:
                                     )
                                 return None
 
-                        dl_result = await _download()
+                        dl_result = await _download_media(msg, fpath)
                         if dl_result:
                             media_count += dl_result[0]
                             media_bytes += dl_result[1]
@@ -660,7 +661,7 @@ class ChatExportEngine:
             "since_message_id": since_msg_id,
             "since_date": since_date.isoformat()
             if isinstance(since_date, datetime)
-            else since_date,
+            else None,
             "files": monthly_files,
         }
 

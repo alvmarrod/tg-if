@@ -29,7 +29,7 @@ from infrastructure.config import UserAccountConfig  # noqa: E402
 from infrastructure.telegram.handlers import parse_session_path  # noqa: E402
 
 
-def main() -> None:
+async def main() -> None:
     parser = argparse.ArgumentParser(
         description="Pre-authenticate a user MTProto session for tg-if chat export.",
     )
@@ -56,7 +56,7 @@ def main() -> None:
 
     raw = json.loads(bots_path.read_text())
     user_data = raw.get("user")
-    if not user_data:
+    if user_data is None:
         sys.exit(
             f'No "user" key in {bots_path}.\n'
             "Add one with api_id and api_hash:\n"
@@ -65,11 +65,28 @@ def main() -> None:
             "in the config itself."
         )
 
-    cfg = UserAccountConfig.model_validate(user_data)
-    if args.output:
-        name, workdir = parse_session_path(args.output)
+    if not isinstance(user_data, dict):
+        sys.exit(
+            f'"user" in {bots_path} must be an object, got {type(user_data).__name__}.\n'
+            'Expected: {"api_id": ..., "api_hash": "...", "session_file": "..."}'
+        )
     else:
-        name, workdir = parse_session_path(cfg.session_file)
+        # Type is confirmed as dict, proceed with validation
+        pass
+
+    cfg = UserAccountConfig.model_validate(user_data)
+
+    result = parse_session_path(args.output if args.output else cfg.session_file)
+    if result is None:
+        sys.exit(
+            f"Invalid session path: {args.output if args.output else cfg.session_file}"
+        )
+
+    name, workdir = result
+    if not name or not workdir:
+        sys.exit(
+            f"Invalid session path components: {args.output if args.output else cfg.session_file}"
+        )
 
     print(f"Starting interactive login for user session '{name}'...")
     print(
@@ -85,17 +102,21 @@ def main() -> None:
     )
 
     try:
-        client.start()
+        await client.start()
     except Exception as e:
-        sys.exit(f"Authentication failed: {e}")
+        print(f"Authentication failed: {e}")
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
 
     session_path = Path(workdir) / f"{name}.session"
     print(f"\nSession saved to: {session_path}")
     print("Copy this file into your tg-if sessions/ directory before deploying:")
     print(f"  cp {session_path} /path/to/deploy/sessions/")
 
-    client.stop()
-
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+
+    asyncio.run(main())

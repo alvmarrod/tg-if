@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
-from aio_pika.abc import AbstractChannel
+from aio_pika.abc import AbstractChannel, AbstractQueue
 
 from infrastructure.broker.rabbitmq import RabbitMQManager
 
@@ -39,20 +39,21 @@ class Consumer:
 
     async def start(self) -> None:
         conn = self._manager.connection
-        if not conn or conn.is_closed:
+        if conn is None:
             raise ConsumerError("not connected to broker")
+        if conn.is_closed:
+            raise ConsumerError("broker connection is closed")
 
         self._channel = await conn.channel()
-        assert self._channel is not None
         queue = await self._channel.declare_queue(self._queue_name, durable=True)
 
-        if self._routing_key:
+        if self._routing_key is not None:
             exchange = await self._channel.get_exchange("tg-if.responses")
             await queue.bind(exchange, routing_key=self._routing_key)
 
         self._task = asyncio.create_task(self._run(queue))
 
-    async def _run(self, queue: Any) -> None:
+    async def _run(self, queue: AbstractQueue) -> None:
         try:
             async with queue.iterator() as queue_iter:
                 async for message in queue_iter:

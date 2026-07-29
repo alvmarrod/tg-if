@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+
+
+def _now_utc() -> datetime:
+    """Get current UTC time."""
+    return datetime.now(timezone.utc)
 
 
 @dataclass
@@ -37,25 +41,29 @@ class TargetStat:
 
 class ServiceMetrics:
     def __init__(self) -> None:
-        self.bot_events: defaultdict[str, BotEventMetrics] = defaultdict(
-            BotEventMetrics
-        )
+        self.bot_events: dict[str, BotEventMetrics] = {}
         self.responses = ResponseMetrics()
-        self.started_at: datetime = datetime.now(timezone.utc)
+        self.started_at: datetime = _now_utc()
         self.per_target: dict[str, TargetMetrics] = {}
-        self.target_window_start: datetime = datetime.now(timezone.utc)
+        self.target_window_start: datetime = _now_utc()
 
     def event_received(self, bot_id: str) -> None:
+        if bot_id not in self.bot_events:
+            self.bot_events[bot_id] = BotEventMetrics()
         self.bot_events[bot_id].received += 1
 
     def event_matched(self, bot_id: str) -> None:
+        if bot_id not in self.bot_events:
+            self.bot_events[bot_id] = BotEventMetrics()
         self.bot_events[bot_id].matched += 1
 
     def event_published(self, bot_id: str) -> None:
+        if bot_id not in self.bot_events:
+            self.bot_events[bot_id] = BotEventMetrics()
         self.bot_events[bot_id].published += 1
 
     def target_event(self, bot_id: str, target: str) -> None:
-        now = datetime.now(timezone.utc)
+        now = _now_utc()
         if (now - self.target_window_start).total_seconds() >= 3600:
             self.per_target.clear()
             self.target_window_start = now
@@ -93,6 +101,7 @@ class ServiceMetrics:
             bots=sorted(tm.bots),
         )
 
+    # Response metrics methods
     def response_consumed(self) -> None:
         self.responses.consumed += 1
 
@@ -103,7 +112,7 @@ class ServiceMetrics:
         self.responses.failed += 1
 
     def snapshot(self) -> dict[str, Any]:
-        uptime = datetime.now(timezone.utc) - self.started_at
+        uptime = _now_utc() - self.started_at
         return {
             "uptime_seconds": int(uptime.total_seconds()),
             "bot_events": {
@@ -118,5 +127,13 @@ class ServiceMetrics:
                 "consumed": self.responses.consumed,
                 "sent": self.responses.sent,
                 "failed": self.responses.failed,
+            },
+            "per_target": {
+                name: {
+                    "events": tm.events,
+                    "last_event": tm.last_event.isoformat() if tm.last_event else None,
+                    "bots": sorted(tm.bots),
+                }
+                for name, tm in self.per_target.items()
             },
         }

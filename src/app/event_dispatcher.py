@@ -105,7 +105,7 @@ class EventDispatcher:
             file_unique_id = getattr(event, "file_unique_id")
 
         media_url: str | None = None
-        if file_unique_id and hasattr(event, "bot_id"):
+        if file_unique_id:
             base = f"{self._media_base_url}/files/{event.bot_id}/{file_unique_id}"
             if file_id:
                 base += f"?file_id={file_id}"
@@ -123,11 +123,11 @@ class EventDispatcher:
             "text": getattr(event, "text", None),
             "caption": getattr(event, "caption", None),
             "command_args": getattr(event, "command_args", None),
-            "from_user": event.from_user,
+            "from_user": getattr(event, "from_user", None),
             "reply_to_message_id": getattr(event, "reply_to_message_id", None),
             "reply_to_message": getattr(event, "reply_to_message", None),
             "routing_context": context.model_dump(),
-            "payload": event.raw_payload,
+            "payload": getattr(event, "raw_payload", None),
         }
 
         if file_id:
