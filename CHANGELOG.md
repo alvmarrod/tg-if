@@ -19,6 +19,9 @@
   setting `self._user_client = None` instead of crashing.
 - `ReceiverService.start()` now cleans up previously started consumers when a
   later consumer fails to start, preventing orphaned consumers from running.
+- Added pre-commit hooks CQ-25 through CQ-31: `check-added-large-files`,
+  `check-merge-conflict`, `check-json`, `check-yaml`, `check-toml`,
+  `mixed-line-ending`, `trailing-whitespace`, `debug-statements`.
 - `_on_media_config_message` no longer re-raises on validation failure: invalid
   messages are logged, admin-notified, and dropped — instead of triggering the
   consumer's retry loop for a permanently invalid message.
