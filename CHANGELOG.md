@@ -37,6 +37,13 @@
   function + `ServiceComponents` dataclass). `ReceiverService.__init__` now
   delegates component assembly while retaining flat attribute assignment for
   backward compatibility. Zero test changes required.
+- CQ-44: Refactored `admin_commands.py` (1285 → 543 lines) by extracting
+  media, upload, and export commands into three delegate classes:
+  `admin_commands_media.py` (MediaCommandDelegate),
+  `admin_commands_upload.py` (UploadCommandDelegate),
+  `admin_commands_export.py` (ExportCommandDelegate). Shared utility
+  functions moved to `admin_commands_utils.py`. `AdminCommandHandler.handle()`
+  dispatches to delegates via the same command names. Zero test logic changes.
 
 ## [0.12.0] - 2026-07-29
 

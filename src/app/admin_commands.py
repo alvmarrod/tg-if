@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 import structlog
 
+from app.admin_commands_export import ExportCommandDelegate
+from app.admin_commands_media import MediaCommandDelegate
+from app.admin_commands_upload import UploadCommandDelegate
+from app.admin_commands_utils import (
+    _format_size,
+    _format_uptime,
+    _parse_kwargs,
+)
 from app.chat_exporter import ChatExportEngine
 from app.event_dispatcher import EventDispatcher
 from app.log_buffer import LogBuffer
@@ -16,12 +22,7 @@ from app.media_config import MediaConfigManager
 from app.metrics import ServiceMetrics
 from domain.entities import (
     CallbackQueryEvent,
-    ChatInfo,
-    ChatType,
     CommandEvent,
-    ExportState,
-    MediaConfigRule,
-    MediaScope,
     RoutingContext,
     TelegramEvent,
 )
@@ -34,69 +35,6 @@ from infrastructure.telegram.client import TelegramClient
 
 
 logger = structlog.get_logger()
-
-
-def _parse_kwargs(args: list[str]) -> dict[str, str | None]:
-    kwargs: dict[str, str | None] = {}
-    i = 0
-    while i < len(args):
-        if args[i].startswith("--"):
-            key = args[i][2:]
-            if i + 1 < len(args) and not args[i + 1].startswith("--"):
-                kwargs[key] = args[i + 1]
-                i += 2
-            else:
-                kwargs[key] = None
-                i += 1
-        else:
-            i += 1
-    return kwargs
-
-
-def _parse_scope(scope_str: str) -> tuple[MediaScope | None, str | None]:
-    if scope_str == "global":
-        return MediaScope.GLOBAL, None
-    if scope_str.startswith("chat:"):
-        return MediaScope.CHAT, scope_str[5:]
-    if scope_str.startswith("user:"):
-        return MediaScope.USER, scope_str[5:]
-    return None, None
-
-
-def _format_size(size_bytes: int) -> str:
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    if size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    if size_bytes < 1024 * 1024 * 1024:
-        return f"{size_bytes / (1024 * 1024):.1f} MB"
-    return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
-
-
-def _parse_size(s: str) -> int | None:
-    s = s.strip().upper()
-    try:
-        if s.endswith("GB"):
-            return int(float(s[:-2]) * 1024 * 1024 * 1024)
-        if s.endswith("MB"):
-            return int(float(s[:-2]) * 1024 * 1024)
-        if s.endswith("KB"):
-            return int(float(s[:-2]) * 1024)
-        return int(s)
-    except ValueError:
-        return None
-
-
-def _format_uptime(seconds: int) -> str:
-    hours, remainder = divmod(seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-    parts: list[str] = []
-    if hours:
-        parts.append(f"{hours}h")
-    if minutes:
-        parts.append(f"{minutes}m")
-    parts.append(f"{secs}s")
-    return " ".join(parts)
 
 
 class AdminCommandHandler:
@@ -138,6 +76,23 @@ class AdminCommandHandler:
         self._on_restart = on_restart
         self._chats_search: dict[int, str] = {}
 
+        self._media_delegate = MediaCommandDelegate(
+            admin=admin_client,
+            media_config=media_config,
+            storage=storage,
+        )
+        self._upload_delegate = UploadCommandDelegate(
+            admin=admin_client,
+            upload_registry=upload_registry,
+            upload_storage=upload_storage,
+        )
+        self._export_delegate = ExportCommandDelegate(
+            admin=admin_client,
+            clients=clients,
+            config=config,
+            chat_exporter=chat_exporter,
+        )
+
     async def register_commands(self) -> None:
         commands: list[tuple[str, str]] = [
             ("help", "Show available commands"),
@@ -177,9 +132,9 @@ class AdminCommandHandler:
 
         if isinstance(event, CallbackQueryEvent):
             if event.callback_data.startswith("chats:"):
-                await self._handle_chats_callback(event)
+                await self._export_delegate.handle_chats_callback(event)
             else:
-                await self._handle_export_callback(event)
+                await self._export_delegate.handle_export_callback(event)
             return
 
         if not isinstance(event, CommandEvent):
@@ -207,11 +162,11 @@ class AdminCommandHandler:
         elif cmd == "log":
             await self._cmd_log(event.chat_id, args)
         elif cmd == "chats":
-            await self._cmd_chats(event.chat_id, args)
+            await self._export_delegate.cmd_chats(event.chat_id, args)
         elif cmd == "export":
-            await self._cmd_export(event.chat_id, args)
+            await self._export_delegate.cmd_export(event.chat_id, args)
         elif cmd in ("export-cancel", "export_cancel"):
-            await self._cmd_export_cancel(event.chat_id)
+            await self._export_delegate.cmd_export_cancel(event.chat_id)
         elif cmd == "shutdown":
             await self._cmd_shutdown(event.chat_id)
         elif cmd == "start":
@@ -219,25 +174,25 @@ class AdminCommandHandler:
         elif cmd == "restart":
             await self._cmd_restart(event.chat_id)
         elif cmd in ("media-eager", "media_eager"):
-            await self._cmd_media_eager(event.chat_id, args)
+            await self._media_delegate.cmd_media_eager(event.chat_id, args)
         elif cmd in ("media-lazy", "media_lazy"):
-            await self._cmd_media_lazy(event.chat_id, args)
+            await self._media_delegate.cmd_media_lazy(event.chat_id, args)
         elif cmd in ("media-config", "media_config"):
-            await self._cmd_media_config(event.chat_id, args)
+            await self._media_delegate.cmd_media_config(event.chat_id, args)
         elif cmd in ("media-list", "media_list"):
-            await self._cmd_media_list(event.chat_id, args)
+            await self._media_delegate.cmd_media_list(event.chat_id, args)
         elif cmd in ("media-stats", "media_stats"):
-            await self._cmd_media_stats(event.chat_id)
+            await self._media_delegate.cmd_media_stats(event.chat_id)
         elif cmd in ("media-prune", "media_prune"):
-            await self._cmd_media_prune(event.chat_id, args)
+            await self._media_delegate.cmd_media_prune(event.chat_id, args)
         elif cmd in ("media-purge", "media_purge"):
-            await self._cmd_media_purge(event.chat_id, args)
+            await self._media_delegate.cmd_media_purge(event.chat_id, args)
         elif cmd in ("upload-list", "upload_list"):
-            await self._cmd_upload_list(event.chat_id, args)
+            await self._upload_delegate.cmd_upload_list(event.chat_id, args)
         elif cmd in ("upload-prune", "upload_prune"):
-            await self._cmd_upload_prune(event.chat_id, args)
+            await self._upload_delegate.cmd_upload_prune(event.chat_id, args)
         elif cmd in ("upload-purge", "upload_purge"):
-            await self._cmd_upload_purge(event.chat_id, args)
+            await self._upload_delegate.cmd_upload_purge(event.chat_id, args)
         else:
             await self._admin.send_text(
                 event.chat_id,
@@ -590,696 +545,3 @@ class AdminCommandHandler:
             lines.append(f"{ts} {level:<5} {event}  {extra_str}")
 
         await self._admin.send_text(chat_id, "\n".join(lines))
-
-    async def _cmd_media_eager(self, chat_id: int, args: list[str]) -> None:
-        if self._media_config is None:
-            await self._admin.send_text(chat_id, "Media config not available")
-            return
-        kwargs = _parse_kwargs(args)
-        scope_str = kwargs.get("scope")
-        if not scope_str:
-            await self._admin.send_text(
-                chat_id,
-                "Usage: /media-eager --scope global|chat:<id>|user:<id> [--type <t>]",
-            )
-            return
-
-        scope, scope_id = _parse_scope(scope_str)
-        if scope is None:
-            await self._admin.send_text(chat_id, f"Invalid scope: {scope_str}")
-            return
-
-        types_str = kwargs.get("type") or "all"
-        content_types = [t.strip() for t in types_str.split(",")]
-
-        rule = MediaConfigRule(
-            scope=scope,
-            scope_id=scope_id,
-            content_types=content_types,
-            action="eager",
-        )
-        self._media_config.add_rule(rule)
-        await self._admin.send_text(
-            chat_id,
-            f"Eager download set: scope={scope_str}, type={types_str}",
-        )
-
-    async def _cmd_media_lazy(self, chat_id: int, args: list[str]) -> None:
-        if self._media_config is None:
-            await self._admin.send_text(chat_id, "Media config not available")
-            return
-        kwargs = _parse_kwargs(args)
-        scope_str = kwargs.get("scope")
-        if not scope_str:
-            await self._admin.send_text(
-                chat_id,
-                "Usage: /media-lazy --scope global|chat:<id>|user:<id> [--type <t>]",
-            )
-            return
-
-        scope, scope_id = _parse_scope(scope_str)
-        if scope is None:
-            await self._admin.send_text(chat_id, f"Invalid scope: {scope_str}")
-            return
-
-        types_str = kwargs.get("type") or "all"
-        content_types = [t.strip() for t in types_str.split(",")]
-
-        rule = MediaConfigRule(
-            scope=scope,
-            scope_id=scope_id,
-            content_types=content_types,
-            action="lazy",
-        )
-        self._media_config.add_rule(rule)
-        await self._admin.send_text(
-            chat_id,
-            f"Lazy download set: scope={scope_str}, type={types_str}",
-        )
-
-    async def _cmd_media_config(self, chat_id: int, args: list[str]) -> None:
-        if self._media_config is None:
-            await self._admin.send_text(chat_id, "Media config not available")
-            return
-        rules = self._media_config.list_rules()
-        if not rules:
-            await self._admin.send_text(chat_id, "No media config rules")
-            return
-
-        lines = ["Media config rules:"]
-        for i, r in enumerate(rules, 1):
-            sid = f":{r.scope_id}" if r.scope_id else ""
-            lines.append(
-                f"  {i}. {r.scope}{sid} types={','.join(r.content_types)} -> {r.action}"
-            )
-        await self._admin.send_text(chat_id, "\n".join(lines))
-
-    async def _cmd_media_list(self, chat_id: int, args: list[str]) -> None:
-        if self._storage is None:
-            await self._admin.send_text(chat_id, "Storage not available")
-            return
-        kwargs = _parse_kwargs(args)
-        sort_spec = kwargs.get("sort") or "size:desc"
-        files = await self._storage.list_files()
-
-        if not files:
-            await self._admin.send_text(chat_id, "No cached media")
-            return
-
-        sort_cols = [s.strip() for s in sort_spec.split(",")]
-        for col_dir in reversed(sort_cols):
-            parts = col_dir.split(":")
-            col = parts[0]
-            reverse = len(parts) < 2 or parts[1] != "asc"
-            if col == "size":
-                files.sort(key=lambda f: f.size, reverse=reverse)
-            elif col == "accesses":
-                files.sort(key=lambda f: f.accesses, reverse=reverse)
-            elif col == "lru":
-                files.sort(
-                    key=lambda f: f.last_access.timestamp() if f.last_access else 0,
-                    reverse=reverse,
-                )
-            elif col == "stored_at":
-                files.sort(key=lambda f: f.stored_at.timestamp(), reverse=reverse)
-
-        lines = [
-            "Cached media:",
-            f"{'file_unique_id':<18} {'type':<6} {'size':>10} "
-            f"{'accesses':>9} {'last_access':<20} {'stored_at':<20}",
-        ]
-        for f in files:
-            la = f.last_access.strftime("%Y-%m-%d %H:%M") if f.last_access else "—"
-            sa = f.stored_at.strftime("%Y-%m-%d %H:%M") if f.stored_at else "—"
-            size_str = _format_size(f.size)
-            lines.append(
-                f"{f.file_unique_id:<18} {f.ext:<6} {size_str:>10} "
-                f"{f.accesses:>9} {la:<20} {sa:<20}"
-            )
-        await self._admin.send_text(chat_id, "\n".join(lines))
-
-    async def _cmd_media_stats(self, chat_id: int) -> None:
-        if self._storage is None:
-            await self._admin.send_text(chat_id, "Storage not available")
-            return
-        stats = await self._storage.stats()
-        lines = [
-            "Media cache statistics:",
-            f"  Total files: {stats['total_files']}",
-            f"  Total size:  {_format_size(stats['total_size_bytes'])}",
-        ]
-        by_type = stats.get("by_type", {})
-        if by_type:
-            lines.append("  By type:")
-            for ext in sorted(by_type):
-                info = by_type[ext]
-                lines.append(
-                    f"    .{ext:<5} {info['count']:>6} files, "
-                    f"{_format_size(info['size_bytes'])}"
-                )
-        await self._admin.send_text(chat_id, "\n".join(lines))
-
-    async def _cmd_media_prune(self, chat_id: int, args: list[str]) -> None:
-        if self._storage is None:
-            await self._admin.send_text(chat_id, "Storage not available")
-            return
-        kwargs = _parse_kwargs(args)
-
-        keep_first: int | None = None
-        max_size: int | None = None
-        older_than_days: int | None = None
-
-        keep_str = kwargs.get("keep-first")
-        if keep_str:
-            try:
-                keep_first = int(keep_str)
-            except ValueError:
-                await self._admin.send_text(
-                    chat_id, f"Invalid --keep-first value: {keep_str}"
-                )
-                return
-
-        max_size_str = kwargs.get("max-size")
-        if max_size_str:
-            max_size = _parse_size(max_size_str)
-            if max_size is None:
-                await self._admin.send_text(
-                    chat_id, f"Invalid --max-size value: {max_size_str}"
-                )
-                return
-
-        older_str = kwargs.get("older-than")
-        if older_str:
-            try:
-                older_than_days = int(older_str.rstrip("d"))
-            except ValueError:
-                await self._admin.send_text(
-                    chat_id, f"Invalid --older-than value: {older_str}"
-                )
-                return
-
-        if keep_first is None and max_size is None and older_than_days is None:
-            await self._admin.send_text(
-                chat_id,
-                "Usage: /media-prune --keep-first N | --max-size N[KB|MB|GB] | --older-than Nd",
-            )
-            return
-
-        deleted = await self._storage.prune(
-            keep_first=keep_first,
-            max_size=max_size,
-            older_than_days=older_than_days,
-        )
-        await self._admin.send_text(
-            chat_id, f"Pruned {deleted} file{'s' if deleted != 1 else ''}"
-        )
-
-    async def _cmd_media_purge(self, chat_id: int, args: list[str]) -> None:
-        if self._storage is None:
-            await self._admin.send_text(chat_id, "Storage not available")
-            return
-        if not args or args[0] != "confirm":
-            stats = await self._storage.stats()
-            await self._admin.send_text(
-                chat_id,
-                f"⚠️ This will delete all {stats['total_files']} cached files "
-                f"({_format_size(stats['total_size_bytes'])}). "
-                "Send /media-purge confirm to proceed.",
-            )
-            return
-
-        deleted = await self._storage.purge()
-        await self._admin.send_text(
-            chat_id, f"Purged {deleted} file{'s' if deleted != 1 else ''}"
-        )
-
-    async def _cmd_upload_list(self, chat_id: int, args: list[str]) -> None:
-        if self._upload_registry is None:
-            await self._admin.send_text(chat_id, "Upload registry not available")
-            return
-        kwargs = _parse_kwargs(args)
-        sort_spec = kwargs.get("sort") or "uses:desc"
-        bot_filter = kwargs.get("bot")
-
-        entries = await self._upload_registry.list_all(bot_id=bot_filter)
-        if not entries:
-            await self._admin.send_text(chat_id, "No upload records")
-            return
-
-        sort_cols = [s.strip() for s in sort_spec.split(",")]
-        for col_dir in reversed(sort_cols):
-            parts = col_dir.split(":")
-            col = parts[0]
-            reverse = len(parts) < 2 or parts[1] != "asc"
-            if col == "hash":
-                entries.sort(key=lambda e: e.content_hash, reverse=reverse)
-            elif col == "bot":
-                entries.sort(key=lambda e: e.bot_id, reverse=reverse)
-            elif col == "ext":
-                entries.sort(key=lambda e: e.ext, reverse=reverse)
-            elif col == "size":
-                entries.sort(key=lambda e: e.size, reverse=reverse)
-            elif col == "uses":
-                entries.sort(key=lambda e: e.use_count, reverse=reverse)
-            elif col == "lru":
-                entries.sort(key=lambda e: e.last_used_at, reverse=reverse)
-            elif col == "created_at":
-                entries.sort(key=lambda e: e.created_at, reverse=reverse)
-
-        lines = [
-            "Upload records:",
-            f"{'hash':<14} {'bot':<12} {'ext':<5} {'size':>10} "
-            f"{'fid':>4} {'uses':>5} {'last_used':<20} {'created':<20}",
-        ]
-        for e in entries:
-            fid_mark = "✅" if e.file_id else "❌"
-            lu = (
-                datetime.fromtimestamp(e.last_used_at, tz=timezone.utc).strftime(
-                    "%Y-%m-%d %H:%M"
-                )
-                if e.last_used_at
-                else "—"
-            )
-            ca = (
-                datetime.fromtimestamp(e.created_at, tz=timezone.utc).strftime(
-                    "%Y-%m-%d %H:%M"
-                )
-                if e.created_at
-                else "—"
-            )
-            size_str = _format_size(e.size)
-            lines.append(
-                f"{e.content_hash[:12]:<14} {e.bot_id:<12} {e.ext:<5} "
-                f"{size_str:>10} {fid_mark:>4} {e.use_count:>5} {lu:<20} {ca:<20}"
-            )
-        await self._admin.send_text(chat_id, "\n".join(lines))
-
-    async def _cmd_upload_prune(self, chat_id: int, args: list[str]) -> None:
-        if self._upload_registry is None or self._upload_storage is None:
-            await self._admin.send_text(chat_id, "Upload service not available")
-            return
-        kwargs = _parse_kwargs(args)
-        bot_filter = kwargs.get("bot")
-
-        keep_first: int | None = None
-        max_size: int | None = None
-        older_than_days: int | None = None
-
-        keep_str = kwargs.get("keep-first")
-        if keep_str:
-            try:
-                keep_first = int(keep_str)
-            except ValueError:
-                await self._admin.send_text(
-                    chat_id, f"Invalid --keep-first value: {keep_str}"
-                )
-                return
-
-        max_size_str = kwargs.get("max-size")
-        if max_size_str:
-            max_size = _parse_size(max_size_str)
-            if max_size is None:
-                await self._admin.send_text(
-                    chat_id, f"Invalid --max-size value: {max_size_str}"
-                )
-                return
-
-        older_str = kwargs.get("older-than")
-        if older_str:
-            try:
-                older_than_days = int(older_str.rstrip("d"))
-            except ValueError:
-                await self._admin.send_text(
-                    chat_id, f"Invalid --older-than value: {older_str}"
-                )
-                return
-
-        if keep_first is None and max_size is None and older_than_days is None:
-            await self._admin.send_text(
-                chat_id,
-                "Usage: /upload-prune "
-                "--keep-first N | --max-size N[KB|MB|GB] | --older-than Nd [--bot <n>]",
-            )
-            return
-
-        entries = await self._upload_registry.list_all(bot_id=bot_filter)
-        if not entries:
-            await self._admin.send_text(chat_id, "No upload records to prune")
-            return
-
-        candidates: list[Any] = list(entries)
-        now = datetime.now(timezone.utc).timestamp()
-
-        if older_than_days is not None:
-            cutoff = now - older_than_days * 86400
-            candidates = [e for e in candidates if e.last_used_at < cutoff]
-
-        if keep_first is not None:
-            candidates.sort(key=lambda e: e.last_used_at, reverse=True)
-            candidates = candidates[keep_first:]
-
-        if max_size is not None:
-            candidates.sort(key=lambda e: e.last_used_at, reverse=True)
-            kept: list[Any] = []
-            running = 0
-            for e in sorted(entries, key=lambda e: e.last_used_at, reverse=True):
-                if e.size + running > max_size:
-                    break
-                kept.append(e)
-                running += e.size
-            kept_hashes = {e.content_hash for e in kept}
-            candidates = [e for e in candidates if e.content_hash not in kept_hashes]
-
-        deleted = 0
-        for e in candidates:
-            try:
-                await self._upload_storage.delete(e.bot_id, e.content_hash)
-            except Exception:
-                logger.warning(
-                    "upload storage delete failed during prune",
-                    bot=e.bot_id,
-                    content_hash=e.content_hash,
-                    exc_info=True,
-                )
-            await self._upload_registry.delete(e.content_hash)
-            deleted += 1
-
-        await self._admin.send_text(
-            chat_id,
-            f"Pruned {deleted} upload record{'s' if deleted != 1 else ''}",
-        )
-
-    async def _cmd_upload_purge(self, chat_id: int, args: list[str]) -> None:
-        if self._upload_registry is None or self._upload_storage is None:
-            await self._admin.send_text(chat_id, "Upload service not available")
-            return
-        kwargs = _parse_kwargs(args)
-        bot_filter = kwargs.get("bot")
-
-        entries = await self._upload_registry.list_all(bot_id=bot_filter)
-        if not entries:
-            await self._admin.send_text(chat_id, "No upload records to purge")
-            return
-
-        if not args or args[0] != "confirm":
-            total_size = sum(e.size for e in entries)
-            await self._admin.send_text(
-                chat_id,
-                f"⚠️ This will delete all {len(entries)} upload record"
-                f"{'s' if len(entries) != 1 else ''} "
-                f"({_format_size(total_size)}). "
-                "Send /upload-purge confirm to proceed.",
-            )
-            return
-
-        deleted = 0
-        for e in entries:
-            try:
-                await self._upload_storage.delete(e.bot_id, e.content_hash)
-            except Exception:
-                logger.warning(
-                    "upload storage delete failed during purge",
-                    bot=e.bot_id,
-                    content_hash=e.content_hash,
-                    exc_info=True,
-                )
-            await self._upload_registry.delete(e.content_hash)
-            deleted += 1
-
-        await self._admin.send_text(
-            chat_id,
-            f"Purged {deleted} upload record{'s' if deleted != 1 else ''}",
-        )
-
-    _ITEMS_PER_PAGE = 15
-
-    async def _collect_chats(self) -> list[ChatInfo]:
-        if not self._clients:
-            return []
-
-        all_chats: list[ChatInfo] = []
-        seen_ids: set[int] = set()
-
-        for bot_name, client in self._clients.items():
-            try:
-                dialogs = await client.get_dialogs()
-            except Exception:
-                logger.warning("Failed to get known chats", bot=bot_name, exc_info=True)
-                continue
-            for d in dialogs:
-                if d["chat_id"] in seen_ids:
-                    continue
-                seen_ids.add(d["chat_id"])
-                try:
-                    chat_type = ChatType(d["type"])
-                except ValueError:
-                    logger.warning(
-                        "Unknown chat type", type=d["type"], chat_id=d["chat_id"]
-                    )
-                    continue
-                ci = ChatInfo(
-                    chat_id=d["chat_id"],
-                    title=d["title"],
-                    chat_type=chat_type,
-                    members=d["members"],
-                    can_read=d["can_read"],
-                    can_write=d["can_write"],
-                    exportable=d["can_read"],
-                    bot_id=bot_name,
-                )
-                all_chats.append(ci)
-
-        all_chats.sort(key=lambda c: c.title.lower())
-        return all_chats
-
-    async def _cmd_chats(self, chat_id: int, args: list[str]) -> None:
-        kwargs = _parse_kwargs(args)
-        search = (kwargs.get("search") or "").strip().lower()
-
-        if search:
-            self._chats_search[chat_id] = search
-        else:
-            self._chats_search.pop(chat_id, None)
-
-        if not self._clients:
-            await self._admin.send_text(chat_id, "No bot clients available")
-            return
-
-        all_chats = await self._collect_chats()
-
-        if not all_chats:
-            await self._admin.send_text(chat_id, "No accessible chats found")
-            return
-
-        if search:
-            all_chats = [c for c in all_chats if search in c.title.lower()]
-
-        if not all_chats:
-            if search:
-                await self._admin.send_text(chat_id, f'No chats matching "{search}"')
-            else:
-                await self._admin.send_text(chat_id, "No accessible chats found")
-            return
-
-        await self._render_chats_page(chat_id, all_chats, page=0, search=search)
-
-    async def _render_chats_page(
-        self,
-        chat_id: int,
-        all_chats: list[ChatInfo],
-        page: int,
-        search: str = "",
-        message_id: int | None = None,
-    ) -> None:
-        total = len(all_chats)
-        total_pages = (total + self._ITEMS_PER_PAGE - 1) // self._ITEMS_PER_PAGE
-        page = max(0, min(page, total_pages - 1))
-
-        start = page * self._ITEMS_PER_PAGE
-        page_chats = all_chats[start : start + self._ITEMS_PER_PAGE]
-
-        header = "Chats"
-        if search:
-            header += f' matching "{search}"'
-        if total_pages > 1:
-            header += f" (page {page + 1}/{total_pages})"
-
-        lines = [
-            header + ":",
-            f"{'Title':<30} {'ID':<15} {'Type':<12} {'Members':>8}  Ex",
-        ]
-        for c in page_chats:
-            export_mark = "✅" if c.exportable else "❌"
-            lines.append(
-                f"{c.title[:28]:<30} {c.chat_id:<15} {c.chat_type.value:<12} "
-                f"{c.members:>8}  {export_mark}"
-            )
-        lines.append("")
-        lines.append(f"Total: {total} chat{'s' if total != 1 else ''}")
-
-        buttons: list[list[dict[str, str]]] = []
-        if total_pages > 1:
-            nav_row: list[dict[str, str]] = []
-            if page > 0:
-                nav_row.append({"text": "◀️ Prev", "callback_data": f"chats:{page - 1}"})
-            nav_row.append(
-                {"text": f"{page + 1}/{total_pages}", "callback_data": "chats:noop"}
-            )
-            if page < total_pages - 1:
-                nav_row.append({"text": "Next ▶️", "callback_data": f"chats:{page + 1}"})
-            buttons.append(nav_row)
-
-        text = "\n".join(lines)
-
-        if message_id is not None:
-            await self._admin.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=text,
-                reply_markup=buttons,
-            )
-        else:
-            await self._admin.send_text(
-                chat_id,
-                text,
-                reply_markup=buttons,
-            )
-
-    async def _handle_chats_callback(self, event: CallbackQueryEvent) -> None:
-        try:
-            page = int(event.callback_data.split(":", 1)[1])
-        except (ValueError, IndexError):
-            await self._admin.answer_callback_query(event.callback_id)
-            return
-
-        search = self._chats_search.get(event.chat_id, "")
-
-        all_chats = await self._collect_chats()
-        if not all_chats:
-            await self._admin.answer_callback_query(
-                event.callback_id, "No chats available"
-            )
-            return
-
-        if search:
-            all_chats = [c for c in all_chats if search in c.title.lower()]
-
-        if not all_chats:
-            await self._admin.answer_callback_query(
-                event.callback_id, "No matching chats"
-            )
-            return
-
-        await self._render_chats_page(
-            event.chat_id,
-            all_chats,
-            page=page,
-            search=search,
-            message_id=event.message_id,
-        )
-        await self._admin.answer_callback_query(event.callback_id)
-
-    async def _cmd_export(self, chat_id: int, args: list[str]) -> None:
-        if self._chat_exporter is None:
-            await self._admin.send_text(chat_id, "Export service not available")
-            return
-
-        if not args:
-            await self._admin.send_text(
-                chat_id,
-                "Usage: /export <chat_id> [--since <date|msg_id>] [--offset <msg_id>] [--parallelism N]",
-            )
-            return
-
-        kwargs = _parse_kwargs(args)
-        positional = [a for a in args if not a.startswith("--")]
-
-        if not positional:
-            await self._admin.send_text(chat_id, "Missing chat_id argument")
-            return
-
-        try:
-            target_chat_id = int(positional[0])
-        except ValueError:
-            await self._admin.send_text(chat_id, f"Invalid chat_id: {positional[0]}")
-            return
-
-        since: str | int | None = None
-        since_str = kwargs.get("since")
-        if since_str:
-            if since_str.lstrip("-").isdigit():
-                since = int(since_str)
-            else:
-                since = str(since_str)
-
-        parallelism = 1
-        par_str = kwargs.get("parallelism")
-        if par_str:
-            try:
-                parallelism = max(1, int(par_str))
-            except ValueError:
-                await self._admin.send_text(
-                    chat_id, f"Invalid parallelism value: {par_str}"
-                )
-                return
-
-        offset: int | None = None
-        offset_str = kwargs.get("offset")
-        if offset_str:
-            try:
-                offset = int(offset_str)
-            except ValueError:
-                await self._admin.send_text(
-                    chat_id, f"Invalid offset value: {offset_str}"
-                )
-                return
-
-        if self._chat_exporter.state not in (ExportState.IDLE,):
-            await self._admin.send_text(
-                chat_id,
-                f"Export already in progress (state: {self._chat_exporter.state.value})",
-            )
-            return
-
-        await self._admin.send_text(
-            chat_id,
-            f"Starting export of chat {target_chat_id}...",
-        )
-
-        asyncio.ensure_future(
-            self._chat_exporter.export_chat(
-                chat_id=target_chat_id,
-                notify_chat_id=chat_id,
-                since=since,
-                parallelism=parallelism,
-                offset=offset,
-            )
-        )
-
-    async def _cmd_export_cancel(self, chat_id: int) -> None:
-        if self._chat_exporter is None:
-            await self._admin.send_text(chat_id, "Export service not available")
-            return
-        if self._chat_exporter.state != ExportState.RUNNING:
-            await self._admin.send_text(chat_id, "No export is currently running")
-            return
-        self._chat_exporter.cancel()
-        await self._admin.send_text(chat_id, "Export cancelled")
-
-    async def _handle_export_callback(self, event: CallbackQueryEvent) -> None:
-        if self._chat_exporter is None:
-            return
-        action = event.callback_data
-        if action == "export:pause":
-            self._chat_exporter.pause()
-            await self._admin.answer_callback_query(event.callback_id, "Export paused")
-        elif action == "export:resume":
-            self._chat_exporter.resume()
-            await self._admin.answer_callback_query(event.callback_id, "Export resumed")
-        elif action == "export:cancel":
-            self._chat_exporter.cancel()
-            await self._admin.answer_callback_query(
-                event.callback_id, "Export cancelled"
-            )
-        else:
-            await self._admin.answer_callback_query(event.callback_id)
