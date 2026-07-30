@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-07-30
+
+### Fixed
+
+- `TelegramClient.delete_message()` no longer raises a false-positive
+  `RuntimeError` when Pyrogram returns a non-`None` success indicator (e.g.
+  `True` in group chats). Messages are still correctly deleted.
+
 ## [0.13.0] - 2026-07-30
 
 ### Changed

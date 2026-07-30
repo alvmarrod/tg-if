@@ -401,19 +401,11 @@ class TestDownloadAndDelete:
         raw_client.download_media.assert_awaited_once_with("file_1", in_memory=True)
         assert result is buf
 
-    async def test_delete_message_raises_on_unexpected_result(
-        self, telegram_client: TelegramClient, raw_client: MagicMock
-    ) -> None:
-        raw_client.delete_messages.return_value = "not_none"
-        with pytest.raises(RuntimeError, match="delete_messages returned unexpected"):
-            await telegram_client.delete_message(chat_id=1, message_ids=10)
-
     async def test_delete_message_happy_path(
         self, telegram_client: TelegramClient, raw_client: MagicMock
     ) -> None:
-        raw_client.delete_messages.return_value = None
-        result = await telegram_client.delete_message(chat_id=1, message_ids=10)
-        assert result is None
+        raw_client.delete_messages.return_value = True
+        await telegram_client.delete_message(chat_id=1, message_ids=10)
         raw_client.delete_messages.assert_awaited_once_with(chat_id=1, message_ids=10)
 
 

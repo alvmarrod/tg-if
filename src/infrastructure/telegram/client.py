@@ -418,11 +418,7 @@ class TelegramClient:
         chat_id: int,
         message_ids: int | list[int],
     ) -> None:
-        result = await self._client.delete_messages(
-            chat_id=chat_id, message_ids=message_ids
-        )
-        if result is not None:
-            raise RuntimeError("delete_messages returned unexpected value")
+        await self._client.delete_messages(chat_id=chat_id, message_ids=message_ids)
 
     async def _on_connect_handler(self) -> None:
         logger.info("telegram client connected", bot=self._bot_id)
