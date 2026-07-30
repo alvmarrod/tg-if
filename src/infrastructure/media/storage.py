@@ -7,8 +7,12 @@ from typing import Any, Protocol
 
 import aiofiles
 import aiofiles.os
+import structlog
 
 from domain.schemas import FileInfo
+
+
+logger = structlog.get_logger()
 
 
 _EXT_MIME: dict[str, str] = {
@@ -59,7 +63,16 @@ class DiskStorage:
         self, base_path: str = "/data/media", max_tracked_files: int = 0
     ) -> None:
         self._base = Path(base_path)
-        self._base.mkdir(parents=True, exist_ok=True)
+        self._available = True
+        try:
+            self._base.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning(
+                "media cache unavailable — disk storage degraded",
+                path=str(self._base),
+                exc_info=True,
+            )
+            self._available = False
         self._accesses: dict[str, int] = {}
         self._last_access: dict[str, float] = {}
         self._stored_at: dict[str, float] = {}
@@ -74,6 +87,8 @@ class DiskStorage:
     async def store(
         self, bot_id: str, file_unique_id: str, data: bytes, ext: str
     ) -> str:
+        if not self._available:
+            return ""
         dir_path = self._base / bot_id
         await aiofiles.os.makedirs(dir_path, exist_ok=True)
 
@@ -92,8 +107,9 @@ class DiskStorage:
         self._touch_access(k)
         return str(file_path)
 
-    async def retrieve(self, bot_id: str, file_unique_id: str) -> bytes:
-        # Search for any extension
+    async def retrieve(self, bot_id: str, file_unique_id: str) -> bytes | None:
+        if not self._available:
+            return None
         dir_path = self._base / bot_id
         try:
             await aiofiles.os.stat(dir_path)
@@ -115,6 +131,8 @@ class DiskStorage:
             return await fh.read()
 
     async def path_for(self, bot_id: str, file_unique_id: str) -> Path | None:
+        if not self._available:
+            return None
         dir_path = self._base / bot_id
         if not dir_path.exists():
             return None
@@ -124,6 +142,8 @@ class DiskStorage:
         return None
 
     async def delete(self, bot_id: str, file_unique_id: str) -> bool:
+        if not self._available:
+            return False
         path = await self.path_for(bot_id, file_unique_id)
         if path is None:
             return False
@@ -135,6 +155,8 @@ class DiskStorage:
         return True
 
     async def list_files(self, bot_id: str | None = None) -> list[FileInfo]:
+        if not self._available:
+            return []
         results: list[FileInfo] = []
         bots = (
             [bot_id] if bot_id else [d.name for d in self._base.iterdir() if d.is_dir()]
@@ -246,6 +268,8 @@ class DiskStorage:
         return 0
 
     async def purge(self) -> int:
+        if not self._available:
+            return 0
         files = await self.list_files()
         deleted = 0
         for f in files:

@@ -9,6 +9,10 @@
 - `TelegramClient.delete_message()` no longer raises a false-positive
   `RuntimeError` when Pyrogram returns a non-`None` success indicator (e.g.
   `True` in group chats). Messages are still correctly deleted.
+- `DiskStorage` no longer crashes the service on `PermissionError` during
+  startup when the configured base path (e.g. `/mnt/ram`) is inaccessible.
+  The error is logged as a warning and all storage methods degrade safely
+  until the path becomes available.
 
 ## [0.13.0] - 2026-07-30
 
