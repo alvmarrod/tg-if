@@ -23,6 +23,7 @@ COPY --from=builder /app/.venv .venv
 
 COPY src/ src/
 # config/ is not baked in — mount config/bots.json at /app/config
+COPY version.txt .
 COPY main.py .
 
 ENV PYTHONPATH=/app/src
