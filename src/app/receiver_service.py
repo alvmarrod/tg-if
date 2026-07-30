@@ -98,10 +98,16 @@ class ReceiverService:
                 )
                 self._user_client = TelegramClient(user_cfg)
 
-        self._cache = DiskStorage(config.media_cache_path)
+        self._cache = DiskStorage(
+            config.media_cache_path,
+            max_tracked_files=config.media_max_tracked_files,
+        )
         self._media_config = MediaConfigManager(config.media_config_path)
         self._upload_registry = UploadRegistry(config.upload_db_path)
-        self._upload_storage = DiskStorage(config.upload_storage_path)
+        self._upload_storage = DiskStorage(
+            config.upload_storage_path,
+            max_tracked_files=config.media_max_tracked_files,
+        )
         notifier: AdminNotifier | None = None
         cmd_handler: AdminCommandHandler | None = None
         if config.admin is not None:

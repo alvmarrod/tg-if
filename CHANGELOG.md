@@ -10,6 +10,8 @@
   Created `src/infrastructure/version.py` with a `get_version()` function that
   reads `version.txt` at runtime. `main.py` uses this instead of a hardcoded
   string. `pyproject.toml` and `version.txt` synced to `0.13.0`.
+- CQ-49: `DiskStorage` constructor accepts an optional `max_tracked_files`
+  parameter. See Added section below for details on LRU eviction.
 
 ### Added
 
@@ -25,6 +27,11 @@
   lock on `{session_file}.lock` before starting Pyrogram, and releases it on
   `stop()`. If another instance holds the lock, the second instance raises
   `RuntimeError` after a 30s timeout.
+- CQ-49: Added LRU eviction to `DiskStorage` access metadata dicts
+  (`_accesses`, `_last_access`, `_stored_at`). Configured via
+  `AppConfig.media_max_tracked_files` (default 10000, set to 0 for unlimited).
+  When the limit is exceeded, the least recently accessed entry is evicted,
+  preventing unbounded memory growth from long-running services.
 
 ## [0.12.0] - 2026-07-29
 

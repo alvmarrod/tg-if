@@ -87,6 +87,10 @@ class AppConfig(BaseModel):
         default=30,
         description="Max upload requests per minute per IP (0 = disabled)",
     )
+    media_max_tracked_files: int = Field(
+        default=10000,
+        description="Max access metadata entries before LRU eviction (0 = unlimited)",
+    )
 
 
 class ConfigLoader:
