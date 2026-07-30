@@ -434,4 +434,10 @@ uv run ruff format src/
 
 # Install pre-commit hooks (ruff via Docker, mypy on host)
 pre-commit install
+
+# Run the full stack locally (RabbitMQ + tg-if)
+cp .env.example .env
+docker compose -f docker-compose.dev.yml up --build
+# RabbitMQ management UI: http://localhost:15672 (guest/guest)
+# tg-if health endpoint:  http://localhost:8080/health
 ```

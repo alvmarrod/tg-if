@@ -55,12 +55,15 @@ class MediaStorage(Protocol):
 
 
 class DiskStorage:
-    def __init__(self, base_path: str = "/data/media") -> None:
+    def __init__(
+        self, base_path: str = "/data/media", max_tracked_files: int = 0
+    ) -> None:
         self._base = Path(base_path)
         self._base.mkdir(parents=True, exist_ok=True)
         self._accesses: dict[str, int] = {}
         self._last_access: dict[str, float] = {}
         self._stored_at: dict[str, float] = {}
+        self._max_tracked = max_tracked_files
 
     def _key(self, bot_id: str, file_unique_id: str) -> str:
         return f"{bot_id}/{file_unique_id}"
@@ -253,3 +256,8 @@ class DiskStorage:
     def _touch_access(self, key: str) -> None:
         self._accesses[key] = self._accesses.get(key, 0) + 1
         self._last_access[key] = time.time()
+        if self._max_tracked > 0 and len(self._accesses) > self._max_tracked:
+            lru = min(self._last_access, key=lambda k: self._last_access[k])
+            self._accesses.pop(lru, None)
+            self._last_access.pop(lru, None)
+            self._stored_at.pop(lru, None)
