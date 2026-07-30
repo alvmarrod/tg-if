@@ -32,6 +32,11 @@
   `AppConfig.media_max_tracked_files` (default 10000, set to 0 for unlimited).
   When the limit is exceeded, the least recently accessed entry is evicted,
   preventing unbounded memory growth from long-running services.
+- CQ-45: Refactored `receiver_service.py` (499 → 402 lines) by extracting
+  constructor dependency wiring into `src/app/wiring.py` (`build_components`
+  function + `ServiceComponents` dataclass). `ReceiverService.__init__` now
+  delegates component assembly while retaining flat attribute assignment for
+  backward compatibility. Zero test changes required.
 
 ## [0.12.0] - 2026-07-29
 
