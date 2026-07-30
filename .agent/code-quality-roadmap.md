@@ -102,7 +102,7 @@
 |---|-------|--------|
 | CQ-44 | Split `admin_commands.py` (1285 lines) into dispatch / formatting / business logic modules | Large |
 | CQ-45 | Split `receiver_service.py` (465 lines) — extract wiring from lifecycle | Medium |
-| CQ-46 | Add `docker-compose.yml` with RabbitMQ for local dev | Small |
+| CQ-46 | Add `docker-compose.yml` with RabbitMQ for local dev | Small ✅ |
 | CQ-47 | Add OpenTelemetry tracing for end-to-end visibility | Large |
 | CQ-48 | Sync version across `version.txt`, `pyproject.toml`, `main.py`; read from single source | Small ✅ |
 | CQ-49 | Add LRU eviction or TTL to `DiskStorage._accesses` / `_last_access` dicts | Medium ✅ |
