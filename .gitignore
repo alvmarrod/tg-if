@@ -218,4 +218,7 @@ sessions/
 
 # Local media cache (MEDIA_CACHE_PATH override for local dev)
 media_cache/
+
+# Agent roadmap (local only, not tracked)
+.agent/code-quality-roadmap.md
 .aider*

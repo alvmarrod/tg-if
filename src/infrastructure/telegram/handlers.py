@@ -394,3 +394,49 @@ def build_reply_markup(
 def parse_session_path(session_file: str) -> tuple[str, str]:
     p = Path(session_file)
     return p.stem, str(p.parent)
+
+
+def lock_session_file(session_path: str, timeout: float = 30.0) -> Any:
+    """Acquire an exclusive file lock on a session file's .lock sibling.
+
+    Uses fcntl.flock on Unix. Returns an unlock callable.
+    Raises RuntimeError if the lock cannot be acquired within the timeout.
+    """
+    import fcntl
+    import os
+    import time
+
+    lock_path = session_path + ".lock"
+    lock_dir = os.path.dirname(lock_path)
+    if lock_dir:
+        os.makedirs(lock_dir, exist_ok=True)
+
+    deadline = time.monotonic() + timeout
+    backoff = 0.05
+    last_exc: Exception | None = None
+
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (OSError, BlockingIOError) as exc:
+            if time.monotonic() >= deadline:
+                last_exc = exc
+                break
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 2.0)
+        else:
+
+            def _unlock() -> None:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    os.close(fd)
+                except OSError:
+                    pass
+
+            return _unlock
+
+    raise RuntimeError(
+        f"Could not acquire session lock for {session_path} "
+        f"after 30s (another instance may be running)"
+    ) from last_exc

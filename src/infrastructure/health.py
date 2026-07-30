@@ -5,6 +5,11 @@ from aiohttp import web
 from aiohttp.web import AppKey
 
 from infrastructure.media.endpoint import handle_file_get
+from infrastructure.media.rate_limiter import (
+    _UploadRateLimiterKey,
+    _SlidingWindowLimiter,
+    upload_rate_limit_middleware,
+)
 from infrastructure.media.storage import MediaStorage
 from infrastructure.media.upload_routes import (
     BrokerKey,
@@ -68,10 +73,16 @@ async def create_health_server(
     upload_registry: UploadRegistry | None = None,
     upload_storage: MediaStorage | None = None,
     max_upload_size: int = 2000 * 1024 * 1024,
+    upload_rate_limit: int = 0,
     client_map: dict[str, TelegramClient] | None = None,
     **kwargs: Any,
 ) -> web.TCPSite:
     app = web.Application()
+    if upload_rate_limit > 0:
+        app[_UploadRateLimiterKey] = _SlidingWindowLimiter(
+            max_requests=upload_rate_limit, window_seconds=60.0
+        )
+        app.middlewares.append(upload_rate_limit_middleware)  # type: ignore[arg-type]
     if storage is not None:
         app[StorageKey] = storage
     if upload_registry is not None:

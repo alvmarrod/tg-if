@@ -1,0 +1,40 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: tg-if-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  app:
+    build: .
+    container_name: tg-if-app
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    volumes:
+      - ./config:/app/config:ro
+      - tgif_sessions:/app/sessions
+      - tgif_media:/app/media_cache
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  rabbitmq_data:
+  tgif_sessions:
+  tgif_media:
