@@ -1,3 +1,4 @@
+import asyncio
 import io
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -24,6 +25,7 @@ from infrastructure.telegram.handlers import (
     context_from_reaction_updated,
     edited_message_to_event,
     extract_routing_context,
+    lock_session_file,
     message_to_event,
     parse_session_path,
     reaction_count_updated_to_event,
@@ -75,6 +77,7 @@ class TelegramClient:
             self._client_kwargs["bot_token"] = config.bot_token
         self._init_client()
         self._known_chats: dict[int, ChatDialog] = {}
+        self._session_unlock: Callable[[], None] | None = None
 
     def _init_client(self) -> None:
         self._client = PyrogramClient(**self._client_kwargs)
@@ -120,6 +123,20 @@ class TelegramClient:
         )
 
     async def start(self) -> None:
+        name, workdir = parse_session_path(self._config.session_file)
+        session_path = str(Path(workdir) / f"{name}.session")
+        try:
+            self._session_unlock = await asyncio.get_running_loop().run_in_executor(
+                None, lock_session_file, session_path
+            )
+        except RuntimeError:
+            logger.warning(
+                "could not acquire session lock — another instance may be running",
+                bot=self._bot_id,
+                path=session_path,
+            )
+            raise
+
         try:
             await self._client.start()
             await self._on_connect_handler()
@@ -127,15 +144,13 @@ class TelegramClient:
             msg = str(e)
             if not msg.startswith("[16]"):
                 raise
-            name, workdir = parse_session_path(self._config.session_file)
-            session_path = Path(workdir) / f"{name}.session"
             logger.warning(
                 "stale session detected, resetting",
                 bot=self._bot_id,
-                path=str(session_path),
+                path=session_path,
             )
-            if session_path.exists():
-                session_path.unlink()
+            if Path(session_path).exists():
+                Path(session_path).unlink()
             try:
                 self._init_client()
                 await self._client.start()
@@ -162,6 +177,10 @@ class TelegramClient:
                 "telegram client stop error", bot=self._bot_id, exc_info=True
             )
             raise
+        finally:
+            if self._session_unlock is not None:
+                self._session_unlock()
+                self._session_unlock = None
 
     def set_event_callback(self, callback: EventCallback) -> None:
         self._event_callback = callback

@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-30
+
+### Changed
+
+- CQ-48: Version is now read from `version.txt` as the single source of truth.
+  Created `src/infrastructure/version.py` with a `get_version()` function that
+  reads `version.txt` at runtime. `main.py` uses this instead of a hardcoded
+  string. `pyproject.toml` and `version.txt` synced to `0.13.0`.
+- CQ-49: `DiskStorage` constructor accepts an optional `max_tracked_files`
+  parameter. See Added section below for details on LRU eviction.
+
+### Added
+
+- CQ-50: Added `doc/http_threat_model.md` documenting the unauthenticated HTTP
+  endpoints (`/health`, `/metrics`, `/files/`, `/upload/`), their threat actors,
+  and recommended deployment topology with a reverse proxy.
+- CQ-51: Rate limiting on `POST /upload/` endpoint via a sliding-window
+  per-IP limiter. Configured via `AppConfig.upload_rate_limit` (default 30
+  requests per minute per IP, set to 0 to disable). Includes `X-Forwarded-For`
+  support for reverse-proxy deployments.
+- CQ-52: Session file locking via `fcntl.flock` to prevent race conditions
+  during rolling deployments. `TelegramClient.start()` acquires an exclusive
+  lock on `{session_file}.lock` before starting Pyrogram, and releases it on
+  `stop()`. If another instance holds the lock, the second instance raises
+  `RuntimeError` after a 30s timeout.
+- CQ-49: Added LRU eviction to `DiskStorage` access metadata dicts
+  (`_accesses`, `_last_access`, `_stored_at`). Configured via
+  `AppConfig.media_max_tracked_files` (default 10000, set to 0 for unlimited).
+  When the limit is exceeded, the least recently accessed entry is evicted,
+  preventing unbounded memory growth from long-running services.
+- CQ-45: Refactored `receiver_service.py` (499 → 402 lines) by extracting
+  constructor dependency wiring into `src/app/wiring.py` (`build_components`
+  function + `ServiceComponents` dataclass). `ReceiverService.__init__` now
+  delegates component assembly while retaining flat attribute assignment for
+  backward compatibility. Zero test changes required.
+- CQ-44: Refactored `admin_commands.py` (1285 → 543 lines) by extracting
+  media, upload, and export commands into three delegate classes:
+  `admin_commands_media.py` (MediaCommandDelegate),
+  `admin_commands_upload.py` (UploadCommandDelegate),
+  `admin_commands_export.py` (ExportCommandDelegate). Shared utility
+  functions moved to `admin_commands_utils.py`. `AdminCommandHandler.handle()`
+  dispatches to delegates via the same command names. Zero test logic changes.
+
 ## [0.12.0] - 2026-07-29
 
 ### Changed

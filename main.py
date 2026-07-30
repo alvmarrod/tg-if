@@ -6,6 +6,7 @@ import structlog
 from app.log_buffer import LogBuffer
 from app.receiver_service import ReceiverService
 from infrastructure.config import ConfigLoader
+from infrastructure.version import get_version
 
 
 async def main() -> None:
@@ -29,7 +30,7 @@ async def main() -> None:
 
         logger.info(
             "starting",
-            version="0.1.0",
+            version=get_version(),
             bots=[b.name for b in config.bots],
         )
     except Exception:

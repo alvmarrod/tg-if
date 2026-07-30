@@ -2,32 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from functools import partial
-from pathlib import Path
 from typing import Any
 
 import structlog
 
-from app.admin_commands import AdminCommandHandler
-from app.admin_notifier import AdminNotifier
-from app.bot_command_registry import BotCommandRegistry
-from app.chat_exporter import ChatExportEngine
-from app.subscriber_command_handler import SubscriberCommandHandler
+
+from app.wiring import build_components
 from domain.schemas import AdminSignalType
-from app.event_dispatcher import EventDispatcher
 from app.log_buffer import LogBuffer
-from app.media_config import MediaConfigManager
-from app.media_downloader import MediaDownloader
-from app.metrics import ServiceMetrics
-from app.response_consumer import ResponseConsumer
 from domain.entities import MediaConfigRule, RoutingContext, TelegramEvent
-from infrastructure.broker import Consumer, RabbitMQManager, Publisher
-from infrastructure.config import AppConfig, BotConfig
+from infrastructure.broker import Consumer
+from infrastructure.config import AppConfig
 from infrastructure.health import create_health_server
-from infrastructure.media.storage import DiskStorage
-from infrastructure.sqlite import UploadRegistry
-from infrastructure.telegram.client import TelegramClient
-from infrastructure.telegram.handlers import parse_session_path
 from prometheus_client import Counter, Gauge
 
 # Define Prometheus metrics
@@ -47,16 +33,23 @@ class ReceiverService:
         log_buffer: LogBuffer | None = None,
     ) -> None:
         self._config = config
-        self._manager = RabbitMQManager(config.broker)
-        self._publisher = Publisher(self._manager)
-        self._metrics = ServiceMetrics()
-        self._log_buffer = log_buffer
-        self._dispatcher = EventDispatcher(
-            config.bots,
-            self._publisher,
-            metrics=self._metrics,
-            media_base_url=config.media_base_url,
+        c = build_components(
+            config,
+            log_buffer,
+            on_event=self._on_event,
+            on_response_failed=self._on_response_failed,
+            on_media_config_message=self._on_media_config_message,
+            on_client_connected=self._on_client_connected,
+            on_client_disconnected=self._on_client_disconnected,
+            on_shutdown=self.shutdown,
+            on_start=self.start,
+            on_restart=self.restart,
         )
+        self._manager = c.manager
+        self._publisher = c.publisher
+        self._metrics = c.metrics
+        self._log_buffer = c.log_buffer
+        self._dispatcher = c.dispatcher
         self._health_site: Any = None
         self._health_task: asyncio.Task[None] | None = None
         self._last_health: dict[str, bool] = {}
@@ -68,110 +61,26 @@ class ReceiverService:
         self._disconnect_notified: set[str] = set()
         self._debounce_delay = 300  # seconds (5 min)
 
-        clients: dict[str, TelegramClient] = {}
-        for bot_cfg in config.bots:
-            client = TelegramClient(
-                bot_cfg,
-                self._on_event,
-                on_connect=partial(self._on_client_connected, bot_cfg.name),
-                on_disconnect=partial(self._on_client_disconnected, bot_cfg.name),
-            )
-            clients[bot_cfg.name] = client
-        self._clients = clients
-        self._user_client: TelegramClient | None = None
+        self._clients = c.clients
+        self._user_client = c.user_client
 
-        if config.user_account is not None:
-            name, workdir = parse_session_path(config.user_account.session_file)
-            session_path = Path(workdir) / f"{name}.session"
-            if not session_path.exists():
-                logger.warning(
-                    "user session file not found, skipping user client",
-                    path=str(session_path),
-                    hint="run tools/auth_user.py to create the session interactively",
-                )
-            else:
-                user_cfg = BotConfig(
-                    name=config.user_account.name,
-                    api_id=config.user_account.api_id,
-                    api_hash=config.user_account.api_hash,
-                    session_file=config.user_account.session_file,
-                )
-                self._user_client = TelegramClient(user_cfg)
+        self._cache = c.cache
+        self._media_config = c.media_config
+        self._upload_registry = c.upload_registry
+        self._upload_storage = c.upload_storage
 
-        self._cache = DiskStorage(config.media_cache_path)
-        self._media_config = MediaConfigManager(config.media_config_path)
-        self._upload_registry = UploadRegistry(config.upload_db_path)
-        self._upload_storage = DiskStorage(config.upload_storage_path)
-        notifier: AdminNotifier | None = None
-        cmd_handler: AdminCommandHandler | None = None
-        if config.admin is not None:
-            admin_bot_cfg = BotConfig(
-                name=config.admin.name,
-                api_id=config.admin.api_id,
-                api_hash=config.admin.api_hash,
-                session_file=config.admin.session_file,
-                bot_token=config.admin.bot_token,
-            )
-            admin_client = TelegramClient(admin_bot_cfg)
-            notifier = AdminNotifier(config.admin, client=admin_client)
-            chat_exporter = ChatExportEngine(
-                config=config,
-                clients=self._clients,
-                admin_client=admin_client,
-                user_client=self._user_client,
-            )
-            cmd_handler = AdminCommandHandler(
-                admin_client=admin_client,
-                user_id=config.admin.user_id,
-                clients=self._clients,
-                manager=self._manager,
-                config=config,
-                metrics=self._metrics,
-                dispatcher=self._dispatcher,
-                log_buffer=self._log_buffer,
-                media_config=self._media_config,
-                storage=self._cache,
-                upload_registry=self._upload_registry,
-                upload_storage=self._upload_storage,
-                chat_exporter=chat_exporter,
-                on_shutdown=self.shutdown,
-                on_start=self.start,
-                on_restart=self.restart,
-            )
-            admin_client.set_event_callback(cmd_handler.handle)
-        self._notifier = notifier
-        self._cmd_handler = cmd_handler
+        self._notifier = c.notifier
+        self._cmd_handler = c.cmd_handler
 
-        self._media_downloader = MediaDownloader(
-            storage=self._cache,
-            clients=self._clients,
-            config=self._media_config,
-            publisher=self._publisher,
-            media_base_url=config.media_base_url,
-        )
+        self._media_downloader = c.media_downloader
 
-        self._response_consumer = ResponseConsumer(
-            self._clients,
-            self._manager,
-            metrics=self._metrics,
-            registry=self._upload_registry,
-            upload_storage=self._upload_storage,
-        )
-        self._consumer = Consumer(
-            self._manager,
-            "outgoing.responses",
-            self._response_consumer.handle,
-            on_failed=self._on_response_failed,
-            routing_key="response",
-        )
-        self._media_config_consumer: Consumer | None = None
-        self._bot_command_registry = BotCommandRegistry()
-        self._subscriber_handler = SubscriberCommandHandler(
-            self._bot_command_registry,
-            self._clients,
-            self._manager,
-        )
-        self._sub_cmd_consumer: Consumer | None = None
+        self._response_consumer = c.response_consumer
+        self._consumer = c.consumer
+        self._media_config_consumer = c.media_config_consumer
+
+        self._bot_command_registry = c.bot_command_registry
+        self._subscriber_handler = c.subscriber_handler
+        self._sub_cmd_consumer = c.sub_cmd_consumer
 
     async def _on_event(self, event: TelegramEvent, context: RoutingContext) -> None:
         self._metrics.event_received(event.bot_id)
@@ -435,6 +344,7 @@ class ReceiverService:
             upload_registry=self._upload_registry,
             upload_storage=self._upload_storage,
             max_upload_size=self._config.max_upload_size,
+            upload_rate_limit=self._config.upload_rate_limit,
             clients=list(self._clients.values()),
             client_map=self._clients,
             broker=self._manager,
