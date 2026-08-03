@@ -18,10 +18,12 @@
   startup.
 - Dockerfile: added `RUN mkdir -p /mnt/ram && chown appuser:appuser /mnt/ram`
   to ensure the mount point exists and is writable in the image.
-- `web.Application` now sets `client_max_size=0` (unlimited) explicitly,
+- `web.Application` now sets `client_max_size=sys.maxsize` explicitly,
   preventing large multipart uploads (`POST /upload/{bot_id}`) from being
-  rejected at the aiohttp StreamReader level with a 1 MB body-size cap when
-  running on aiohttp < 3.12 (where unlimited was not yet the default).
+  rejected at the aiohttp multipart reader level. (Using `0` for "unlimited"
+  does not work: while the Request layer treats `0` as falsy/no-limit, the
+  `BodyPartReader.read()` loop checks `len(data) > client_max_size` directly
+  without a zero-guard, so `0` rejects every part with any bytes.)
 - Media metadata extraction no longer reads Pyrogram's deprecated
   `Photo.file_size` property (which logged `This property is deprecated.
   Please use sizes instead`); it now reads `sizes[-1].file_size` for
