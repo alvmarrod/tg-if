@@ -18,6 +18,10 @@
   startup.
 - Dockerfile: added `RUN mkdir -p /mnt/ram && chown appuser:appuser /mnt/ram`
   to ensure the mount point exists and is writable in the image.
+- `web.Application` now sets `client_max_size=0` (unlimited) explicitly,
+  preventing large multipart uploads (`POST /upload/{bot_id}`) from being
+  rejected at the aiohttp StreamReader level with a 1 MB body-size cap when
+  running on aiohttp < 3.12 (where unlimited was not yet the default).
 - Media metadata extraction no longer reads Pyrogram's deprecated
   `Photo.file_size` property (which logged `This property is deprecated.
   Please use sizes instead`); it now reads `sizes[-1].file_size` for
@@ -45,6 +49,15 @@
   and how each `upl_` reference resolves (`resolving upload reference`,
   `upload resolved via cached file_id`, `upload resolved via disk path`).
   Enable with `LOG_LEVEL=DEBUG` to trace media resolution end to end.
+- Media payload values that look like local filesystem paths are now resolved
+  against tg-if's own filesystem and fail fast with a clear error when the
+  file does not exist (`media file ... not found on tg-if`), explaining that
+  subscriber-side files must be uploaded via `POST /upload/{bot_id}` and
+  referenced as `upl_<hash>`. Previously these passed through to Pyrogram,
+  which failed with a cryptic `Failed to decode "..."` error. The directory
+  state (`parent_exists`, `parent_entries`, `parent_entry_count`) is included
+  in the log. Non-`upl_` values that are `file_id`s, URLs, or existing files
+  pass through unchanged, as before.
 
 ## [0.13.0] - 2026-07-30
 

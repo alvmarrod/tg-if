@@ -307,6 +307,13 @@ Any file-typed payload key works with `upl_<hash>`:
 
 Non-`upl_` values pass through unchanged — mixed usage is supported (e.g. `document: "upl_abc", thumb: "file_id_xyz"`).
 
+> **Raw filesystem paths are not shared.** A media value like `/mnt/ram/clip.mp4`
+> is resolved against tg-if's own filesystem. If the file does not exist on
+> tg-if, the response fails with an error explaining the upload contract —
+> the subscriber's local filesystem is not visible to tg-if. Files that live
+> on the subscriber side must be uploaded via `POST /upload/{bot_id}` and
+> referenced as `upl_<hash>`.
+
 ### Admin commands
 
 Use these via the admin bot:

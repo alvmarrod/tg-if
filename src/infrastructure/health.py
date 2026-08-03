@@ -77,7 +77,7 @@ async def create_health_server(
     client_map: dict[str, TelegramClient] | None = None,
     **kwargs: Any,
 ) -> web.TCPSite:
-    app = web.Application()
+    app = web.Application(client_max_size=0)
     if upload_rate_limit > 0:
         app[_UploadRateLimiterKey] = _SlidingWindowLimiter(
             max_requests=upload_rate_limit, window_seconds=60.0
