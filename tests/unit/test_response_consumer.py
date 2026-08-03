@@ -462,6 +462,58 @@ class TestUploadResolution:
         assert ch == "abc"
         mock_storage.path_for.assert_awaited_once_with("aibot", "abc")
 
+    async def test_resolve_missing_local_path_raises_clear_error(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+        mock_storage: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        missing = tmp_path / "0VQuj3CybeU.mp4"
+        with pytest.raises(ValueError) as exc_info:
+            await consumer_with_upload._resolve_upload("aibot", str(missing))
+        msg = str(exc_info.value)
+        assert "not found on tg-if" in msg
+        assert "upl_<hash>" in msg
+        mock_registry.get_by_hash.assert_not_called()
+        mock_storage.path_for.assert_not_called()
+
+    async def test_resolve_missing_absolute_path_raises(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+    ) -> None:
+        with pytest.raises(ValueError, match="not found on tg-if"):
+            await consumer_with_upload._resolve_upload(
+                "aibot", "/mnt/ram/0VQuj3CybeU.mp4"
+            )
+        mock_registry.get_by_hash.assert_not_called()
+
+    async def test_resolve_existing_local_path_passthrough(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        p = tmp_path / "clip.mp4"
+        p.write_bytes(b"data")
+        resolved, ch = await consumer_with_upload._resolve_upload("aibot", str(p))
+        assert resolved == str(p)
+        assert ch is None
+        mock_registry.get_by_hash.assert_not_called()
+
+    async def test_resolve_http_url_passthrough(
+        self,
+        consumer_with_upload: ResponseConsumer,
+        mock_registry: MagicMock,
+    ) -> None:
+        resolved, ch = await consumer_with_upload._resolve_upload(
+            "aibot", "https://example.com/video.mp4"
+        )
+        assert resolved == "https://example.com/video.mp4"
+        assert ch is None
+        mock_registry.get_by_hash.assert_not_called()
+
     async def test_resolve_upload_not_found(
         self,
         consumer_with_upload: ResponseConsumer,

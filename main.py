@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import signal
 
 import structlog
@@ -12,18 +13,21 @@ from infrastructure.version import get_version
 async def main() -> None:
     """Main entry point for the application."""
     log_buffer: LogBuffer = LogBuffer()
+    config = ConfigLoader.load()
+    level = getattr(logging, str(config.log_level).upper(), logging.INFO)
     structlog.configure(
         processors=[
             structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.add_log_level,
             log_buffer.processor,
             structlog.dev.ConsoleRenderer(),
         ],
+        wrapper_class=structlog.make_filtering_bound_logger(level),
         cache_logger_on_first_use=True,
     )
 
     logger = structlog.get_logger()
 
-    config = ConfigLoader.load()
     service: ReceiverService = ReceiverService(config, log_buffer=log_buffer)
     try:
         await service.start()

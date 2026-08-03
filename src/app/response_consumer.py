@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -122,6 +123,40 @@ logger = structlog.get_logger()
 
 _UPLOAD_KEYS: set[str] = {"photo", "video", "document", "audio"}
 
+_PATH_LIKE_PREFIXES = ("./", "../", "~/", ".\\", "..\\")
+
+
+def _is_path_like(value: str) -> bool:
+    if value.startswith(("http://", "https://")):
+        return False
+    return "/" in value or value.startswith(_PATH_LIKE_PREFIXES)
+
+
+def _missing_media_error(bot_id: str, value: str) -> ValueError:
+    p = Path(value)
+    parent = p.parent
+    entries: list[str] = []
+    if parent.exists():
+        try:
+            entries = [e.name for e in parent.iterdir()]
+        except OSError:
+            entries = ["<unreadable>"]
+    logger.error(
+        "media source not found on disk",
+        bot_id=bot_id,
+        path=value,
+        parent_path=str(parent),
+        parent_exists=parent.exists(),
+        parent_entries=entries[:20],
+        parent_entry_count=len(entries),
+    )
+    return ValueError(
+        f"media file {value} not found on tg-if. Local filesystem paths are not "
+        "shared with tg-if — upload the file via POST /upload/{bot_id} first and "
+        "reference the returned upload_id (upl_<hash>) in the payload instead. "
+        "See doc/subscriber_media_interface_esp.md."
+    )
+
 
 class ResponseConsumer:
     def __init__(
@@ -167,17 +202,41 @@ class ResponseConsumer:
         self, bot_id: str, value: str | None
     ) -> tuple[str | None, str | None]:
         if value is None or not value.startswith("upl_"):
+            if (
+                isinstance(value, str)
+                and _is_path_like(value)
+                and not Path(value).exists()
+            ):
+                raise _missing_media_error(bot_id, value)
             return value, None
         content_hash = value[4:]
+        logger.debug(
+            "resolving upload reference",
+            bot_id=bot_id,
+            value=value,
+            content_hash=content_hash,
+        )
         if self._registry is not None:
             entry = await self._registry.get_by_hash(content_hash)
             if entry is not None:
                 if entry.file_id is not None:
                     await self._registry.touch_usage(content_hash)
+                    logger.debug(
+                        "upload resolved via cached file_id",
+                        bot_id=bot_id,
+                        content_hash=content_hash,
+                        file_id=entry.file_id,
+                    )
                     return entry.file_id, content_hash
         if self._upload_storage is not None:
             path = await self._upload_storage.path_for(bot_id, content_hash)
             if path is not None:
+                logger.debug(
+                    "upload resolved via disk path",
+                    bot_id=bot_id,
+                    content_hash=content_hash,
+                    path=str(path),
+                )
                 return str(path), content_hash
         logger.error(
             "upload not found",
@@ -251,6 +310,15 @@ class ResponseConsumer:
         if rtype == "delete_message":
             if "message_id" in kwargs and "message_ids" not in kwargs:
                 kwargs["message_ids"] = kwargs.pop("message_id")
+        logger.debug(
+            "processing outgoing response",
+            bot_id=response.bot_id,
+            response_type=response.response_type,
+            chat_id=response.chat_id,
+            media_values={
+                key: kwargs.get(key) for key in _UPLOAD_KEYS if key in kwargs
+            },
+        )
         resolved_hashes: list[str] = []
         for key in _UPLOAD_KEYS:
             if key in kwargs:

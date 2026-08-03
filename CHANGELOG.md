@@ -2,6 +2,65 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-08-03
+
+### Fixed
+
+- `TelegramClient.delete_message()` no longer raises a false-positive
+  `RuntimeError` when Pyrogram returns a non-`None` success indicator (e.g.
+  `True` in group chats). Messages are still correctly deleted.
+- `DiskStorage` no longer crashes the service on `PermissionError` during
+  startup when the configured base path (e.g. `/mnt/ram`) is inaccessible.
+  The error is logged as a warning and all storage methods degrade safely
+  until the path becomes available.
+- Dockerfile: added `COPY version.txt .` to bake `version.txt` into the
+  image (missing since CQ-48 in 0.13.0), preventing `FileNotFoundError` on
+  startup.
+- Dockerfile: added `RUN mkdir -p /mnt/ram && chown appuser:appuser /mnt/ram`
+  to ensure the mount point exists and is writable in the image.
+- `web.Application` now sets `client_max_size=sys.maxsize` explicitly,
+  preventing large multipart uploads (`POST /upload/{bot_id}`) from being
+  rejected at the aiohttp multipart reader level. (Using `0` for "unlimited"
+  does not work: while the Request layer treats `0` as falsy/no-limit, the
+  `BodyPartReader.read()` loop checks `len(data) > client_max_size` directly
+  without a zero-guard, so `0` rejects every part with any bytes.)
+- Media metadata extraction no longer reads Pyrogram's deprecated
+  `Photo.file_size` property (which logged `This property is deprecated.
+  Please use sizes instead`); it now reads `sizes[-1].file_size` for
+  photo-like media.
+- Telegram send methods no longer pass `reply_to_message_id` to Pyrogram
+  (which logged `This property is deprecated. Please use reply_parameters
+  instead`); they convert it to `ReplyParameters` internally. The
+  `reply_to_message_id` field in the response payload contract is unchanged.
+- Added diagnostic logging in the media send path: when a payload media value
+  looks like a local file path, the client logs whether the file exists on
+  disk (`media source is local file` / `media source not found on disk`)
+  at send time, to help diagnose missing-file send failures. When the file is
+  missing, the warning now also includes the parent directory state
+  (`parent_exists`, `parent_entries`, `parent_entry_count`) to distinguish a
+  missing mount from an empty one.
+
+### Added
+
+- `LOG_LEVEL` env var is now honored: structlog output is filtered to the
+  configured level (default `INFO`) and log lines include a level indicator.
+  Previously the value was loaded but never applied, so DEBUG and TRACE output
+  was always emitted with no way to reduce verbosity.
+- DEBUG-level logging in the outgoing response path (`response_consumer.py`):
+  the raw media values received in the payload (`processing outgoing response`)
+  and how each `upl_` reference resolves (`resolving upload reference`,
+  `upload resolved via cached file_id`, `upload resolved via disk path`).
+  Enable with `LOG_LEVEL=DEBUG` to trace media resolution end to end.
+- Media payload values that look like local filesystem paths are now resolved
+  against tg-if's own filesystem and fail fast with a clear error when the
+  file does not exist (`media file ... not found on tg-if`), explaining that
+  subscriber-side files must be uploaded via `POST /upload/{bot_id}` and
+  referenced as `upl_<hash>`. Previously these passed through to Pyrogram,
+  which failed with a cryptic `Failed to decode "..."` error. The directory
+  state (`parent_exists`, `parent_entries`, `parent_entry_count`) is included
+  in the log. Non-`upl_` values that are `file_id`s, URLs, or existing files
+  pass through unchanged, as before.
+
 ## [0.13.0] - 2026-07-30
 
 ### Changed

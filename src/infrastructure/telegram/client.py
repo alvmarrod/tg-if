@@ -13,7 +13,13 @@ from pyrogram.client import Client as PyrogramClient
 from pyrogram.enums import ParseMode
 from pyrogram.errors import BadMsgNotification
 from pyrogram.handlers.disconnect_handler import DisconnectHandler
-from pyrogram.types import BotCommand, InputMediaPhoto, InputMediaVideo, Message
+from pyrogram.types import (
+    BotCommand,
+    InputMediaPhoto,
+    InputMediaVideo,
+    Message,
+    ReplyParameters,
+)
 
 from domain.entities import ChatType, RoutingContext, TelegramEvent
 from domain.schemas import ChatDialog
@@ -50,6 +56,49 @@ def _parse_mode(value: str | None) -> ParseMode | None:
     if value is None:
         return None
     return ParseMode(value)
+
+
+def _reply_kwargs(reply_to_message_id: int | None) -> dict[str, Any]:
+    if reply_to_message_id is None:
+        return {}
+    return {"reply_parameters": ReplyParameters(message_id=reply_to_message_id)}
+
+
+def _log_media_source(bot_id: str, rtype: str, value: Any) -> None:
+    if not isinstance(value, str):
+        return
+    if "/" not in value and not value.startswith(("~", "./", "../", ".\\")):
+        return
+    if value.startswith(("http://", "https://")):
+        return
+    p = Path(value)
+    if p.exists():
+        logger.info(
+            "media source is local file",
+            bot=bot_id,
+            response_type=rtype,
+            path=value,
+            is_file=p.is_file(),
+            size=p.stat().st_size if p.is_file() else None,
+        )
+    else:
+        parent = p.parent
+        entries: list[str] = []
+        if parent.exists():
+            try:
+                entries = [e.name for e in parent.iterdir()]
+            except OSError:
+                entries = ["<unreadable>"]
+        logger.warning(
+            "media source not found on disk",
+            bot=bot_id,
+            response_type=rtype,
+            path=value,
+            parent_path=str(parent),
+            parent_exists=parent.exists(),
+            parent_entries=entries[:20],
+            parent_entry_count=len(entries),
+        )
 
 
 class TelegramClient:
@@ -214,8 +263,7 @@ class TelegramClient:
     ) -> Message:
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
-        if reply_to_message_id is not None:
-            kwargs["reply_to_message_id"] = reply_to_message_id
+        kwargs.update(_reply_kwargs(reply_to_message_id))
         markup = build_reply_markup(reply_markup)
         if markup is not None:
             kwargs["reply_markup"] = markup
@@ -238,8 +286,8 @@ class TelegramClient:
         kwargs["caption"] = caption
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
-        if reply_to_message_id is not None:
-            kwargs["reply_to_message_id"] = reply_to_message_id
+        kwargs.update(_reply_kwargs(reply_to_message_id))
+        _log_media_source(self._bot_id, "photo", photo)
         markup = build_reply_markup(reply_markup)
         if markup is not None:
             kwargs["reply_markup"] = markup
@@ -262,8 +310,8 @@ class TelegramClient:
         kwargs["caption"] = caption
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
-        if reply_to_message_id is not None:
-            kwargs["reply_to_message_id"] = reply_to_message_id
+        kwargs.update(_reply_kwargs(reply_to_message_id))
+        _log_media_source(self._bot_id, "document", document)
         markup = build_reply_markup(reply_markup)
         if markup is not None:
             kwargs["reply_markup"] = markup
@@ -286,8 +334,8 @@ class TelegramClient:
         kwargs["caption"] = caption
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
-        if reply_to_message_id is not None:
-            kwargs["reply_to_message_id"] = reply_to_message_id
+        kwargs.update(_reply_kwargs(reply_to_message_id))
+        _log_media_source(self._bot_id, "video", video)
         markup = build_reply_markup(reply_markup)
         if markup is not None:
             kwargs["reply_markup"] = markup
@@ -310,8 +358,8 @@ class TelegramClient:
         kwargs["caption"] = caption
         if parse_mode is not None:
             kwargs["parse_mode"] = _parse_mode(parse_mode)
-        if reply_to_message_id is not None:
-            kwargs["reply_to_message_id"] = reply_to_message_id
+        kwargs.update(_reply_kwargs(reply_to_message_id))
+        _log_media_source(self._bot_id, "audio", audio)
         markup = build_reply_markup(reply_markup)
         if markup is not None:
             kwargs["reply_markup"] = markup
@@ -409,8 +457,9 @@ class TelegramClient:
         if not converted:
             return []
         kwargs["media"] = converted
-        if reply_to_message_id is not None:
-            kwargs["reply_to_message_id"] = reply_to_message_id
+        kwargs.update(_reply_kwargs(reply_to_message_id))
+        for item in media:
+            _log_media_source(self._bot_id, "media_group", item.get("media"))
         return await self._client.send_media_group(chat_id=chat_id, **kwargs)
 
     async def delete_message(
@@ -418,11 +467,7 @@ class TelegramClient:
         chat_id: int,
         message_ids: int | list[int],
     ) -> None:
-        result = await self._client.delete_messages(
-            chat_id=chat_id, message_ids=message_ids
-        )
-        if result is not None:
-            raise RuntimeError("delete_messages returned unexpected value")
+        await self._client.delete_messages(chat_id=chat_id, message_ids=message_ids)
 
     async def _on_connect_handler(self) -> None:
         logger.info("telegram client connected", bot=self._bot_id)

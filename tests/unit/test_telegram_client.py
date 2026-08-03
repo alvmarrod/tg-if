@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from structlog.testing import capture_logs
 
 from infrastructure.config import BotConfig
-from infrastructure.telegram.client import TelegramClient, _parse_mode
+from infrastructure.telegram.client import (
+    TelegramClient,
+    _log_media_source,
+    _parse_mode,
+)
 
 
 def _async_gen(items: list[Any]) -> AsyncMock:
@@ -401,19 +407,11 @@ class TestDownloadAndDelete:
         raw_client.download_media.assert_awaited_once_with("file_1", in_memory=True)
         assert result is buf
 
-    async def test_delete_message_raises_on_unexpected_result(
-        self, telegram_client: TelegramClient, raw_client: MagicMock
-    ) -> None:
-        raw_client.delete_messages.return_value = "not_none"
-        with pytest.raises(RuntimeError, match="delete_messages returned unexpected"):
-            await telegram_client.delete_message(chat_id=1, message_ids=10)
-
     async def test_delete_message_happy_path(
         self, telegram_client: TelegramClient, raw_client: MagicMock
     ) -> None:
-        raw_client.delete_messages.return_value = None
-        result = await telegram_client.delete_message(chat_id=1, message_ids=10)
-        assert result is None
+        raw_client.delete_messages.return_value = True
+        await telegram_client.delete_message(chat_id=1, message_ids=10)
         raw_client.delete_messages.assert_awaited_once_with(chat_id=1, message_ids=10)
 
 
@@ -541,9 +539,8 @@ class TestSendMediaGroupHappyPath:
             media=[{"type": "photo", "media": "f.jpg"}],
             reply_to_message_id=42,
         )
-        assert (
-            raw_client.send_media_group.await_args.kwargs["reply_to_message_id"] == 42
-        )
+        kwargs = raw_client.send_media_group.await_args.kwargs
+        assert kwargs["reply_parameters"].message_id == 42
 
 
 class TestAnswerCallbackQueryHappyPath:
@@ -652,3 +649,48 @@ class TestConnectHandlers:
     ) -> None:
         telegram_client._on_disconnect_cb = None
         await telegram_client._on_disconnect_handler(telegram_client._client)
+
+
+class TestMediaSourceLogging:
+    def test_logs_info_when_file_exists(self, tmp_path: Path) -> None:
+        p = tmp_path / "ok.mp4"
+        p.write_text("x")
+        with capture_logs() as cap:
+            _log_media_source("aibot", "video", str(p))
+        assert len(cap) == 1
+        entry = cap[0]
+        assert entry["event"] == "media source is local file"
+        assert entry["log_level"] == "info"
+        assert entry["is_file"] is True
+        assert entry["size"] == 1
+
+    def test_logs_warning_with_parent_state_when_missing(self, tmp_path: Path) -> None:
+        missing = tmp_path / "gone.mp4"
+        with capture_logs() as cap:
+            _log_media_source("aibot", "video", str(missing))
+        assert len(cap) == 1
+        entry = cap[0]
+        assert entry["event"] == "media source not found on disk"
+        assert entry["log_level"] == "warning"
+        assert entry["path"] == str(missing)
+        assert entry["parent_path"] == str(tmp_path)
+        assert entry["parent_exists"] is True
+        assert entry["parent_entries"] == []
+        assert entry["parent_entry_count"] == 0
+
+    def test_logs_warning_when_parent_missing(self, tmp_path: Path) -> None:
+        missing = tmp_path / "nope" / "gone.mp4"
+        with capture_logs() as cap:
+            _log_media_source("aibot", "video", str(missing))
+        assert len(cap) == 1
+        entry = cap[0]
+        assert entry["event"] == "media source not found on disk"
+        assert entry["parent_exists"] is False
+
+    def test_skips_non_path_values(self) -> None:
+        with capture_logs() as cap:
+            _log_media_source("aibot", "video", "https://example.com/a.mp4")
+            _log_media_source("aibot", "video", "AgAC-fileid-value")
+            _log_media_source("aibot", "video", 42)
+            _log_media_source("aibot", "video", None)
+        assert cap == []

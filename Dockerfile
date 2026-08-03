@@ -17,12 +17,15 @@ RUN pip install --no-cache-dir uv
 ARG APP_UID=999
 RUN groupadd -g $APP_UID appuser && useradd -g appuser -u $APP_UID -m appuser
 
+RUN mkdir -p /mnt/ram && chown appuser:appuser /mnt/ram
+
 WORKDIR /app
 
 COPY --from=builder /app/.venv .venv
 
 COPY src/ src/
 # config/ is not baked in — mount config/bots.json at /app/config
+COPY version.txt .
 COPY main.py .
 
 ENV PYTHONPATH=/app/src
