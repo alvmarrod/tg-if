@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [0.13.1] - 2026-07-30
+## [0.13.1] - 2026-08-03
 
 ### Fixed
 
@@ -13,6 +13,23 @@
   startup when the configured base path (e.g. `/mnt/ram`) is inaccessible.
   The error is logged as a warning and all storage methods degrade safely
   until the path becomes available.
+- Dockerfile: added `COPY version.txt .` to bake `version.txt` into the
+  image (missing since CQ-48 in 0.13.0), preventing `FileNotFoundError` on
+  startup.
+- Dockerfile: added `RUN mkdir -p /mnt/ram && chown appuser:appuser /mnt/ram`
+  to ensure the mount point exists and is writable in the image.
+- Media metadata extraction no longer reads Pyrogram's deprecated
+  `Photo.file_size` property (which logged `This property is deprecated.
+  Please use sizes instead`); it now reads `sizes[-1].file_size` for
+  photo-like media.
+- Telegram send methods no longer pass `reply_to_message_id` to Pyrogram
+  (which logged `This property is deprecated. Please use reply_parameters
+  instead`); they convert it to `ReplyParameters` internally. The
+  `reply_to_message_id` field in the response payload contract is unchanged.
+- Added diagnostic logging in the media send path: when a payload media value
+  looks like a local file path, the client logs whether the file exists on
+  disk (`media source is local file` / `media source not found on disk`)
+  at send time, to help diagnose missing-file send failures.
 
 ## [0.13.0] - 2026-07-30
 

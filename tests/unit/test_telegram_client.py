@@ -533,9 +533,8 @@ class TestSendMediaGroupHappyPath:
             media=[{"type": "photo", "media": "f.jpg"}],
             reply_to_message_id=42,
         )
-        assert (
-            raw_client.send_media_group.await_args.kwargs["reply_to_message_id"] == 42
-        )
+        kwargs = raw_client.send_media_group.await_args.kwargs
+        assert kwargs["reply_parameters"].message_id == 42
 
 
 class TestAnswerCallbackQueryHappyPath:

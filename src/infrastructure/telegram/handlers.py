@@ -58,7 +58,6 @@ def _extract_media_info(
         file_unique_id: str | None = getattr(media_obj, "file_unique_id", None)
         raw = MediaRawInfo(file_id=file_id, file_unique_id=file_unique_id)
         for field in (
-            "file_size",
             "mime_type",
             "width",
             "height",
@@ -71,6 +70,13 @@ def _extract_media_info(
             val = getattr(media_obj, field, None)
             if val is not None:
                 raw[field] = val
+        sizes = getattr(media_obj, "sizes", None)
+        if isinstance(sizes, list) and sizes:
+            raw["file_size"] = sizes[-1].file_size
+        else:
+            file_size = getattr(media_obj, "file_size", None)
+            if file_size is not None:
+                raw["file_size"] = file_size
         return file_id, file_unique_id, raw
     return None, None, MediaRawInfo()
 
