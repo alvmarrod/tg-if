@@ -82,11 +82,22 @@ def _log_media_source(bot_id: str, rtype: str, value: Any) -> None:
             size=p.stat().st_size if p.is_file() else None,
         )
     else:
+        parent = p.parent
+        entries: list[str] = []
+        if parent.exists():
+            try:
+                entries = [e.name for e in parent.iterdir()]
+            except OSError:
+                entries = ["<unreadable>"]
         logger.warning(
             "media source not found on disk",
             bot=bot_id,
             response_type=rtype,
             path=value,
+            parent_path=str(parent),
+            parent_exists=parent.exists(),
+            parent_entries=entries[:20],
+            parent_entry_count=len(entries),
         )
 
 

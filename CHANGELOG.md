@@ -29,7 +29,22 @@
 - Added diagnostic logging in the media send path: when a payload media value
   looks like a local file path, the client logs whether the file exists on
   disk (`media source is local file` / `media source not found on disk`)
-  at send time, to help diagnose missing-file send failures.
+  at send time, to help diagnose missing-file send failures. When the file is
+  missing, the warning now also includes the parent directory state
+  (`parent_exists`, `parent_entries`, `parent_entry_count`) to distinguish a
+  missing mount from an empty one.
+
+### Added
+
+- `LOG_LEVEL` env var is now honored: structlog output is filtered to the
+  configured level (default `INFO`) and log lines include a level indicator.
+  Previously the value was loaded but never applied, so DEBUG and TRACE output
+  was always emitted with no way to reduce verbosity.
+- DEBUG-level logging in the outgoing response path (`response_consumer.py`):
+  the raw media values received in the payload (`processing outgoing response`)
+  and how each `upl_` reference resolves (`resolving upload reference`,
+  `upload resolved via cached file_id`, `upload resolved via disk path`).
+  Enable with `LOG_LEVEL=DEBUG` to trace media resolution end to end.
 
 ## [0.13.0] - 2026-07-30
 

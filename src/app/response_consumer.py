@@ -169,15 +169,33 @@ class ResponseConsumer:
         if value is None or not value.startswith("upl_"):
             return value, None
         content_hash = value[4:]
+        logger.debug(
+            "resolving upload reference",
+            bot_id=bot_id,
+            value=value,
+            content_hash=content_hash,
+        )
         if self._registry is not None:
             entry = await self._registry.get_by_hash(content_hash)
             if entry is not None:
                 if entry.file_id is not None:
                     await self._registry.touch_usage(content_hash)
+                    logger.debug(
+                        "upload resolved via cached file_id",
+                        bot_id=bot_id,
+                        content_hash=content_hash,
+                        file_id=entry.file_id,
+                    )
                     return entry.file_id, content_hash
         if self._upload_storage is not None:
             path = await self._upload_storage.path_for(bot_id, content_hash)
             if path is not None:
+                logger.debug(
+                    "upload resolved via disk path",
+                    bot_id=bot_id,
+                    content_hash=content_hash,
+                    path=str(path),
+                )
                 return str(path), content_hash
         logger.error(
             "upload not found",
@@ -251,6 +269,15 @@ class ResponseConsumer:
         if rtype == "delete_message":
             if "message_id" in kwargs and "message_ids" not in kwargs:
                 kwargs["message_ids"] = kwargs.pop("message_id")
+        logger.debug(
+            "processing outgoing response",
+            bot_id=response.bot_id,
+            response_type=response.response_type,
+            chat_id=response.chat_id,
+            media_values={
+                key: kwargs.get(key) for key in _UPLOAD_KEYS if key in kwargs
+            },
+        )
         resolved_hashes: list[str] = []
         for key in _UPLOAD_KEYS:
             if key in kwargs:
