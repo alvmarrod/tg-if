@@ -48,7 +48,7 @@ All events share these top-level fields:
 | `command_args` | array of strings or null | Arguments after the command; `null` for non-command events |
 | `from_user` | object or null | Sender info: `id`, `is_bot`, `first_name`, `last_name`, `username`, `language_code` |
 | `reply_to_message_id` | integer or null | The message ID this event is replying to; `null` if not a reply |
-| `reply_to_message` | object or null | The replied-to message: `message_id`, `from` (user dict), `text`, `caption`; `null` if not a reply |
+| `reply_to_message` | object or null | The replied-to message: `message_id`, `from_user` (user dict), `text`, `caption`; `null` if not a reply. Legacy keys `from` and `from_` mirror `from_user` and are deprecated — they will be removed in a future release |
 | `routing_context` | object | Context used for routing decisions (chat_type, command, has_media, media_type, user_role, is_reply, is_forward) |
 | `payload` | object | Raw Telegram data (file metadata for media; `{}` for text/commands) |
 
@@ -97,6 +97,75 @@ Example:
   "payload": {}
 }
 ```
+
+Example (message replying to another message):
+
+```json
+{
+  "event_id": "550e8400-e29b-41d4-a716-446655440001",
+  "timestamp": 1706543215.456,
+  "bot_id": "aibot",
+  "event_type": "message",
+  "event_subtype": "text",
+  "chat_id": 12345,
+  "user_id": 67890,
+  "message_id": 101,
+  "text": "Thanks!",
+  "caption": null,
+  "command_args": null,
+  "from_user": {
+    "id": 67890,
+    "is_bot": false,
+    "first_name": "John",
+    "last_name": null,
+    "username": "john_doe",
+    "language_code": "en"
+  },
+  "reply_to_message_id": 100,
+  "reply_to_message": {
+    "message_id": 100,
+    "from_user": {
+      "id": 11111,
+      "is_bot": false,
+      "first_name": "Alice",
+      "last_name": "Smith",
+      "username": "alice",
+      "language_code": "en"
+    },
+    "from": {
+      "id": 11111,
+      "is_bot": false,
+      "first_name": "Alice",
+      "last_name": "Smith",
+      "username": "alice",
+      "language_code": "en"
+    },
+    "from_": {
+      "id": 11111,
+      "is_bot": false,
+      "first_name": "Alice",
+      "last_name": "Smith",
+      "username": "alice",
+      "language_code": "en"
+    },
+    "text": "What time works for you?",
+    "caption": null
+  },
+  "routing_context": {
+    "chat_type": "private",
+    "command": null,
+    "has_media": false,
+    "user_role": null,
+    "is_reply": true,
+    "is_forward": false
+  },
+  "payload": {}
+}
+```
+
+> **Deprecation note:** `reply_to_message.from` and `reply_to_message.from_` mirror
+> `reply_to_message.from_user` and will be removed in a future release. New
+> subscribers must read `from_user`.
 
 ### Edited Message Events
 

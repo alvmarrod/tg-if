@@ -150,8 +150,10 @@ class TestExtractReplyToMessage:
         assert result is not None
         assert result["message_id"] == 42
         assert result["text"] == "original"
-        assert result["from_"] is not None
-        assert result["from_"]["id"] == 999
+        assert result["from_user"] is not None
+        assert result["from_user"]["id"] == 999
+        assert result["from"] == result["from_user"]
+        assert result["from_"] == result["from_user"]
 
 
 class TestExtractReactionEmoji:
@@ -273,6 +275,9 @@ class TestMessageToEvent:
         assert event.reply_to_message_id == 5
         assert event.reply_to_message is not None
         assert event.reply_to_message["message_id"] == 5
+        assert event.reply_to_message["from_user"]["id"] == 200
+        assert event.reply_to_message["from"] == event.reply_to_message["from_user"]
+        assert event.reply_to_message["from_"] == event.reply_to_message["from_user"]
 
     def test_message_with_forward(self) -> None:
         origin = MagicMock()

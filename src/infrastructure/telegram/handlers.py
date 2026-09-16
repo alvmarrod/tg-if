@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from domain.schemas import FromUser, MediaRawInfo, ReplyToMessage
+from domain.schemas import FromUser, MediaRawInfo
 
 from pyrogram.types import (
     CallbackQuery,
@@ -105,15 +105,18 @@ def _extract_from_user(
     )
 
 
-def _extract_reply_to_message(reply: Any) -> ReplyToMessage | None:
+def _extract_reply_to_message(reply: Any) -> dict[str, Any] | None:
     if reply is None:
         return None
-    return ReplyToMessage(
-        message_id=reply.id,
-        from_=_extract_from_user(reply.from_user),
-        text=getattr(reply, "text", None),
-        caption=getattr(reply, "caption", None),
-    )
+    from_user = _extract_from_user(reply.from_user)
+    return {
+        "message_id": reply.id,
+        "from_user": from_user,
+        "from": from_user,
+        "from_": from_user,
+        "text": getattr(reply, "text", None),
+        "caption": getattr(reply, "caption", None),
+    }
 
 
 def message_to_event(bot_id: str, message: Message) -> MessageEvent | CommandEvent:
