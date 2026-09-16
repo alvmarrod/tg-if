@@ -15,13 +15,6 @@ class FromUser(TypedDict, total=False):
     language_code: str | None
 
 
-class ReplyToMessage(TypedDict, total=False):
-    message_id: int
-    from_: FromUser | None
-    text: str | None
-    caption: str | None
-
-
 class ChatDialog(TypedDict, total=False):
     chat_id: int
     title: str
@@ -45,7 +38,7 @@ class EventEnvelope(TypedDict, total=False):
     command_args: list[str] | None
     from_user: FromUser | None
     reply_to_message_id: int | None
-    reply_to_message: ReplyToMessage | None
+    reply_to_message: dict[str, Any] | None
     routing_context: dict[str, Any]
     payload: Any
     file_id: str | None

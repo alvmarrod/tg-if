@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-09-16
+
+### Fixed
+
+- `reply_to_message` now includes a canonical `from_user` field with the replied-to
+  message author's info (id, first_name, last_name, username, etc.), so subscribers
+  can read the replied-to user's name as documented. Legacy keys `from` and `from_`
+  are still emitted as mirrors of `from_user` for backward compatibility, but are
+  deprecated and will be removed in a future release. New subscribers must read
+  `from_user`.
+
 ## [0.13.1] - 2026-08-03
 
 ### Fixed

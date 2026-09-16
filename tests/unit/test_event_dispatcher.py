@@ -227,6 +227,70 @@ class TestEventDispatcher:
             "language_code": "en",
         }
 
+    async def test_dispatch_envelope_reply_to_message_has_canonical_and_legacy_keys(
+        self,
+        dispatcher: EventDispatcher,
+        private_context: RoutingContext,
+        mock_publisher: AsyncMock,
+    ) -> None:
+        import json
+
+        from domain.entities import MessageEvent
+
+        reply = {
+            "message_id": 100,
+            "from_user": {
+                "id": 11111,
+                "is_bot": False,
+                "first_name": "Alice",
+                "last_name": "Smith",
+                "username": "alice",
+                "language_code": "en",
+            },
+            "from": {
+                "id": 11111,
+                "is_bot": False,
+                "first_name": "Alice",
+                "last_name": "Smith",
+                "username": "alice",
+                "language_code": "en",
+            },
+            "from_": {
+                "id": 11111,
+                "is_bot": False,
+                "first_name": "Alice",
+                "last_name": "Smith",
+                "username": "alice",
+                "language_code": "en",
+            },
+            "text": "original message",
+            "caption": None,
+        }
+        event = MessageEvent(
+            event_id="evt_rp_1",
+            bot_id="aibot",
+            chat_id=12345,
+            user_id=67890,
+            message_id=200,
+            text="replying",
+            reply_to_message_id=100,
+            reply_to_message=reply,
+        )
+        dispatcher._rules["aibot"] = [
+            RoutingRule(condition={"event_type": "message"}, target="topic.messages"),
+        ]
+
+        await dispatcher.dispatch(event, private_context)
+
+        args, _ = mock_publisher.publish.await_args
+        envelope = args[1]
+        wire: dict[str, Any] = json.loads(json.dumps(envelope))
+        assert wire["reply_to_message"]["message_id"] == 100
+        assert wire["reply_to_message"]["from_user"] == wire["reply_to_message"]["from"]
+        assert (
+            wire["reply_to_message"]["from_user"] == wire["reply_to_message"]["from_"]
+        )
+
     async def test_dispatch_command_envelope_includes_command_args(
         self,
         dispatcher: EventDispatcher,
