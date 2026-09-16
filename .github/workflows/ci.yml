@@ -70,7 +70,7 @@ jobs:
       - name: Bandit security scan
         run: uv run bandit -r src/ -x tests/ --severity-level high
       - name: pip-audit dependency vulnerability scan
-        run: uv run pip-audit --strict
+        run: uv export --frozen --all-extras --all-groups --format requirements-txt | uv run pip-audit --strict -r -
 
   badges:
     needs: [lint-typecheck, test, integration]
